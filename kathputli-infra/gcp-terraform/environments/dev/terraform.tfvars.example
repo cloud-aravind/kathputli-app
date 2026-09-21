@@ -1,0 +1,86 @@
+# =============================================================================
+# Kathputli Development Environment
+# =============================================================================
+# Example environment-specific Terraform variables.
+#
+# Copy this file to terraform.tfvars and replace the placeholder values with
+# your actual environment configuration.
+#
+# Do not commit the real terraform.tfvars file when it contains
+# project-specific or sensitive information.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# GCP Configuration
+# -----------------------------------------------------------------------------
+
+project_id  = "your-gcp-project-id"
+region      = "your-gcp-region"
+zone        = "your-gcp-zone"
+environment = "dev"
+
+
+# -----------------------------------------------------------------------------
+# Network CIDR Configuration
+# -----------------------------------------------------------------------------
+# Keep these values aligned with the approved Kathputli IP/CIDR plan.
+# -----------------------------------------------------------------------------
+
+subnet_cidr_range            = "your-gke-subnet-cidr"
+pod_secondary_cidr_range     = "your-gke-pod-secondary-cidr"
+service_secondary_cidr_range = "your-gke-service-secondary-cidr"
+management_subnet_cidr_range = "your-management-subnet-cidr"
+
+
+# -----------------------------------------------------------------------------
+# GKE Configuration
+# -----------------------------------------------------------------------------
+# Defines the private GKE cluster and its control-plane networking.
+# -----------------------------------------------------------------------------
+
+cluster_name           = "kathputli-dev-gke"
+master_ipv4_cidr_block = "your-gke-control-plane-cidr"
+
+# GKE node locations.
+# Add additional zones here if the node pool is later expanded.
+node_locations = [
+  "your-gke-zone"
+]
+
+
+# -----------------------------------------------------------------------------
+# GKE Node Pool Configuration
+# -----------------------------------------------------------------------------
+# Defines the worker node pool, autoscaling limits, and node lifecycle
+# management settings.
+# -----------------------------------------------------------------------------
+
+node_pools = [
+  {
+    name               = "kathputli-dev-node-pool"
+    machine_type       = "e2-small"
+    disk_size_gb       = 30
+    disk_type          = "pd-standard"
+    min_node_count     = 1
+    max_node_count     = 3
+    preemptible        = false
+    auto_upgrade       = true
+    auto_repair        = true
+    initial_node_count = 1
+  }
+]
+
+
+# -----------------------------------------------------------------------------
+# GKE Node Service Account
+# -----------------------------------------------------------------------------
+# IAM roles required by the dedicated GKE node service account.
+#
+# The actual service account is created by the IAM module. This variable
+# controls the roles assigned to that identity.
+# -----------------------------------------------------------------------------
+
+node_sa_roles = [
+  "roles/container.defaultNodeServiceAccount",
+]

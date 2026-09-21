@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Kathputli Design System
+   Elegant art marketplace — ivory, maroon, gold and charcoal.
+========================================================================== */
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-kathputli-ivory text-kathputli-charcoal antialiased font-sans;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .font-display {
+    font-family: theme('fontFamily.display');
+  }
+
+  ::selection {
+    background: #7b1e1e;
+    color: #faf7f2;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f1e6d6;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #a03232;
+    border-radius: 9999px;
+    border: 2px solid #f1e6d6;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #7b1e1e;
+  }
+}
+
+@layer components {
+  /* ------------------------------------------------------------------------
+     Buttons
+  ------------------------------------------------------------------------ */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+           text-sm font-semibold transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:cursor-not-allowed disabled:opacity-50
+           active:scale-[0.98];
+  }
+
+  .btn-primary {
+    @apply btn bg-kathputli-maroon text-white shadow-maroon
+           hover:bg-kathputli-maroon-dark
+           focus:ring-kathputli-maroon/30;
+  }
+
+  .btn-secondary {
+    @apply btn border border-kathputli-maroon bg-white
+           text-kathputli-maroon
+           hover:bg-kathputli-beige
+           focus:ring-kathputli-maroon/20;
+  }
+
+  .btn-ghost {
+    @apply btn text-kathputli-charcoal
+           hover:bg-kathputli-beige
+           hover:text-kathputli-maroon
+           focus:ring-kathputli-maroon/20;
+  }
+
+  .btn-danger {
+    @apply btn bg-red-700 text-white
+           hover:bg-red-800
+           focus:ring-red-500/30;
+  }
+
+  /* ------------------------------------------------------------------------
+     Forms
+  ------------------------------------------------------------------------ */
+
+  .input {
+    @apply w-full rounded-lg border border-[#ded4c8] bg-white
+           px-3.5 py-2.5 text-sm text-kathputli-charcoal
+           shadow-sm transition
+           placeholder:text-[#9a8f87]
+           focus:border-kathputli-maroon
+           focus:outline-none
+           focus:ring-2 focus:ring-kathputli-maroon/10;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-kathputli-charcoal;
+  }
+
+  /* ------------------------------------------------------------------------
+     Surfaces
+  ------------------------------------------------------------------------ */
+
+  .card {
+    @apply rounded-2xl border border-[#e7ded4] bg-white shadow-card;
+  }
+
+  .glass {
+    @apply border-b border-[#e7ded4] bg-white/95 backdrop-blur-xl;
+  }
+
+  /* ------------------------------------------------------------------------
+     Badges
+  ------------------------------------------------------------------------ */
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5
+           text-xs font-semibold;
+  }
+
+  .badge-success {
+    @apply badge bg-green-50 text-green-700 ring-1 ring-green-100;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-50 text-amber-700 ring-1 ring-amber-100;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-50 text-blue-700 ring-1 ring-blue-100;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-50 text-red-700 ring-1 ring-red-100;
+  }
+
+  .badge-muted {
+    @apply badge bg-gray-100 text-gray-600 ring-1 ring-gray-200;
+  }
+
+  .badge-brand {
+    @apply badge bg-kathputli-beige text-kathputli-maroon
+           ring-1 ring-kathputli-gold/30;
+  }
+
+  /* ------------------------------------------------------------------------
+     Chips
+  ------------------------------------------------------------------------ */
+
+  .chip {
+    @apply inline-flex cursor-pointer select-none items-center gap-1.5
+           rounded-full border border-[#ded4c8] bg-white px-3.5 py-1.5
+           text-sm font-medium text-kathputli-charcoal shadow-sm transition
+           hover:border-kathputli-gold
+           hover:text-kathputli-maroon;
+  }
+
+  .chip-active {
+    @apply border-kathputli-maroon bg-kathputli-maroon
+           text-white shadow-maroon
+           hover:text-white;
+  }
+
+  /* ------------------------------------------------------------------------
+     Loading skeleton
+  ------------------------------------------------------------------------ */
+
+  .skeleton {
+    @apply rounded-lg bg-[#e9e1d8];
+    background-image:
+      linear-gradient(
+        90deg,
+        rgba(233,225,216,0.7) 25%,
+        rgba(250,247,242,0.95) 37%,
+        rgba(233,225,216,0.7) 63%
+      );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
