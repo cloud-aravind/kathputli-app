@@ -30,7 +30,7 @@ resource "google_container_cluster" "gke_cluster" {
   # ---------------------------------------------------------------------------
   project  = var.project_id
   name     = var.cluster_name
-  location = var.region
+  location = var.cluster_location
 
   # Attach the cluster to the Kathputli VPC and GKE subnet.
   network    = var.network_name
@@ -90,7 +90,12 @@ resource "google_container_cluster" "gke_cluster" {
   master_authorized_networks_config {
     gcp_public_cidrs_access_enabled      = false
     private_endpoint_enforcement_enabled = true
+
+    cidr_blocks {
+    cidr_block = var.management_subnet_cidr_range
   }
+  }
+
 
 
   # ---------------------------------------------------------------------------
@@ -157,6 +162,7 @@ resource "google_container_cluster" "gke_cluster" {
   # default node pool is removed. Explicitly specifying the dedicated
   # Kathputli node service account prevents GKE from falling back to the
   # project-level default Compute Engine service account.
+  
   node_config {
     service_account = var.node_service_account
 
@@ -208,11 +214,11 @@ resource "google_container_node_pool" "kathputli_node_pool" {
 
   name     = each.value.name
   cluster  = google_container_cluster.gke_cluster.name
-  location = var.region
+  location = var.cluster_location
   project  = var.project_id
 
   initial_node_count = each.value.initial_node_count
-  node_locations     = var.node_locations
+  node_locations = length(var.node_locations) > 0 ? var.node_locations : null
 
 
   # ---------------------------------------------------------------------------

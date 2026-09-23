@@ -12,6 +12,11 @@ variable "region" {
   type        = string
 }
 
+variable "cluster_location" {
+  description = "The GKE cluster location. A zone creates a zonal cluster, while a region creates a regional cluster."
+  type        = string
+}
+
 variable "cluster_name" {
   description = "The name of the GKE cluster."
   type        = string
@@ -47,6 +52,11 @@ variable "service_secondary_range_name" {
 
 variable "master_ipv4_cidr_block" {
   description = "The dedicated private CIDR block used by the GKE control plane."
+  type        = string
+}
+
+variable "management_subnet_cidr_range" {
+  description = "The CIDR range of the management subnet authorized to access the private GKE control plane."
   type        = string
 }
 
@@ -90,3 +100,6 @@ variable "node_locations" {
   description = "The zones where the GKE node pool will run."
   type        = list(string)
 }
+
+
+

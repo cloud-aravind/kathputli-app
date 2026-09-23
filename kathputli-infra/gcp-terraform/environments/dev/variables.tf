@@ -42,6 +42,10 @@ variable "region" {
   type        = string
 }
 
+variable "cluster_location" {
+  description = "The GKE cluster location. A zone creates a zonal cluster, while a region creates a regional cluster."
+  type        = string
+}
 
 # -----------------------------------------------------------------------------
 # GCP Zone
@@ -121,6 +125,16 @@ variable "master_ipv4_cidr_block" {
 variable "node_locations" {
   description = "Zones where the GKE node pool will run."
   type        = list(string)
+}
+
+
+# -----------------------------------------------------------------------------
+# Bastion Host Configuration
+# -----------------------------------------------------------------------------
+
+variable "bastion_machine_type" {
+  description = "Compute Engine machine type used by the Bastion host."
+  type        = string
 }
 
 
