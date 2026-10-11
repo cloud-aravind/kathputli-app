@@ -1,20 +1,17 @@
-# user-service
+# Kathputli User Service
 
-CloudKitchen microservice. Go + Gin, clean architecture.
+User profile service. Auth Service owns credentials; User Service owns profile data.
 
-## Layout
-- `cmd/`                 — entrypoint (`main.go`)
-- `internal/handler/`    — Gin HTTP handlers (transport layer)
-- `internal/service/`    — business logic
-- `internal/repository/` — PostgreSQL data access
-- `internal/model/`      — domain structs
-- `internal/middleware/` — JWT auth, RBAC, logging, metrics
-- `migrations/`          — SQL migrations for this service's schema
-- `Dockerfile`           — multi-stage, non-root, distroless
+Endpoints:
+- GET `/api/users/me`
+- PUT `/api/users/me`
+- GET `/api/users/{id}`
+- GET `/healthz`
+- GET `/readyz`
 
-## Run locally
-```bash
-go mod tidy
-SERVICE_NAME=user-service PORT=8080 go run ./cmd
-curl localhost:8080/healthz
-```
+Consumes `user.created` from NATS JetStream using durable consumer `user-service`.
+
+Stream: `KATHPUTLI_EVENTS`
+Subject: `user.created`
+
+Profile creation is idempotent through an upsert on the user ID.

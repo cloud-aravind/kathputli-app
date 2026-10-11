@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { ordersApi } from '../api/orders'
+import { paymentsApi } from '../api/payments'
+import { normalizeOrder } from '../api/orderFormat'
+import { useAuth } from '../store/AuthContext'
 import {
   ArrowLeft,
   Check,
@@ -27,6 +31,7 @@ const INITIAL_ADDRESS = {
 
 export default function Checkout() {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
 
   const [cart, setCart] = useState([])
   const [cartLoaded, setCartLoaded] = useState(false)
@@ -133,53 +138,49 @@ export default function Checkout() {
 
     setIsSubmitting(true)
 
-    /*
-     * UI-stage checkout:
-     *
-     * Backend order creation and payment integration
-     * will be introduced later during the platform
-     * engineering implementation.
-     */
-    await new Promise((resolve) =>
-      setTimeout(resolve, 1200)
-    )
-
-    const generatedOrderId = `KPT-${Date.now()
-      .toString()
-      .slice(-8)}`
-
-    const order = {
-      id: generatedOrderId,
-      status: 'Order Placed',
-      paymentStatus:
-        paymentMethod === 'cod'
-          ? 'Pending'
-          : 'Confirmed',
-      paymentMethod,
-      items: cart,
-      shippingAddress: address,
-      subtotal,
-      shipping,
-      total,
-      createdAt: new Date().toISOString(),
+    if (!isAuthenticated) {
+      toast.error('Please sign in before placing an order.')
+      navigate('/login', { state: { from: { pathname: '/checkout' } } })
+      setIsSubmitting(false)
+      return
     }
 
-    localStorage.setItem(
-      'kathputli-last-order',
-      JSON.stringify(order)
-    )
+    try {
+      const created = await ordersApi.create(
+        cart.map((item) => ({
+          artwork_id: String(item.artwork_id || item.id),
+          quantity: Number(item.quantity || 1),
+        }))
+      )
 
-    localStorage.setItem(CART_KEY, '[]')
+      // The backend currently supports mock payment completion only.
+      const payment = await paymentsApi.create(created.id, 'mock')
+      const completedPayment = await paymentsApi.completeMock(payment.id)
+      const normalized = normalizeOrder({
+        ...created,
+        status: created.status === 'pending_payment' ? 'confirmed' : created.status,
+        paymentStatus: completedPayment.status,
+        paymentMethod: completedPayment.method || 'mock',
+        shippingAddress: address,
+      })
 
-    setOrderId(generatedOrderId)
-    setOrderPlaced(true)
-    setIsSubmitting(false)
-
-    toast.success('Your order has been placed!')
-
-    setTimeout(() => {
-      navigate(`/orders/${generatedOrderId}`)
-    }, 1600)
+      localStorage.setItem('kathputli-last-order', JSON.stringify(normalized))
+      const prior = JSON.parse(localStorage.getItem('kathputli-orders') || '[]')
+      localStorage.setItem('kathputli-orders', JSON.stringify([
+        normalized,
+        ...(Array.isArray(prior) ? prior.filter((item) => item.id !== normalized.id) : []),
+      ]))
+      localStorage.setItem(CART_KEY, '[]')
+      setOrderId(normalized.id)
+      setOrderPlaced(true)
+      toast.success('Your order and mock payment were completed.')
+      setTimeout(() => navigate(`/orders/${normalized.id}`), 1200)
+    } catch (error) {
+      console.error('Unable to place Kathputli order:', error)
+      toast.error(error?.response?.data?.error || 'Could not place your order. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   /*

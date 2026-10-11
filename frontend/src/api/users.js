@@ -1,11 +1,8 @@
 import client from './client'
 
-// Users service — /api/users/me/*
+// The current User Service supports only the authenticated user's profile.
 export const usersApi = {
-  getProfile: () => client.get('/api/users/me/profile').then((r) => r.data),
+  getProfile: () => client.get('/api/users/me').then((r) => r.data),
   updateProfile: (payload) =>
-    client.put('/api/users/me/profile', payload).then((r) => r.data),
-  getAddresses: () => client.get('/api/users/me/addresses').then((r) => r.data),
-  addAddress: (payload) =>
-    client.post('/api/users/me/addresses', payload).then((r) => r.data),
+    client.put('/api/users/me', { name: payload.name }).then((r) => r.data),
 }

@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { ordersApi } from '../api/orders'
+import { deliveriesApi } from '../api/deliveries'
+import { normalizeOrder } from '../api/orderFormat'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -55,40 +58,30 @@ export default function OrderTrack() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    try {
-      let foundOrder = null
-
-      const lastOrder = JSON.parse(
-        localStorage.getItem(LAST_ORDER_KEY) || 'null'
-      )
-
-      if (lastOrder?.id === id) {
-        foundOrder = lastOrder
-      }
-
-      if (!foundOrder) {
-        const storedOrders = JSON.parse(
-          localStorage.getItem(ORDERS_KEY) || '[]'
-        )
-
-        if (Array.isArray(storedOrders)) {
-          foundOrder =
-            storedOrders.find(
-              (item) => String(item.id) === String(id)
-            ) || null
+    let active = true
+    async function loadOrder() {
+      try {
+        const data = await ordersApi.get(id)
+        let normalized = normalizeOrder(data)
+        try {
+          const delivery = await deliveriesApi.getByOrder(id)
+          const deliveryStatus = String(delivery.status || '').toLowerCase()
+          const deliveryMap = { assigned: 'Artwork Processing', picked_up: 'Shipped', in_transit: 'Shipped', delivered: 'Delivered' }
+          if (deliveryMap[deliveryStatus]) normalized = { ...normalized, status: deliveryMap[deliveryStatus], delivery }
+        } catch (deliveryError) {
+          // Delivery may not exist until the asynchronous order/payment events are processed.
+          if (deliveryError?.response?.status !== 404) console.warn('Delivery status is not available yet.')
         }
+        if (active) setOrder(normalized)
+      } catch (error) {
+        if (!active) return
+        setError(error?.response?.status === 404 ? 'We could not find this order.' : 'Unable to load this order.')
+      } finally {
+        if (active) setLoading(false)
       }
-
-      if (!foundOrder) {
-        setError('We could not find this order.')
-      } else {
-        setOrder(foundOrder)
-      }
-    } catch {
-      setError('Unable to load this order.')
-    } finally {
-      setLoading(false)
     }
+    loadOrder()
+    return () => { active = false }
   }, [id])
 
   if (loading) {

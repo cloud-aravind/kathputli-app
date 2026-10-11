@@ -1,20 +1,45 @@
-# notification-service
+# Kathputli Notification Service
 
-CloudKitchen microservice. Go + Gin, clean architecture.
+Independent notification microservice for Kathputli.
 
-## Layout
-- `cmd/`                 — entrypoint (`main.go`)
-- `internal/handler/`    — Gin HTTP handlers (transport layer)
-- `internal/service/`    — business logic
-- `internal/repository/` — PostgreSQL data access
-- `internal/model/`      — domain structs
-- `internal/middleware/` — JWT auth, RBAC, logging, metrics
-- `migrations/`          — SQL migrations for this service's schema
-- `Dockerfile`           — multi-stage, non-root, distroless
+## Responsibilities
 
-## Run locally
-```bash
-go mod tidy
-SERVICE_NAME=notification-service PORT=8080 go run ./cmd
-curl localhost:8080/healthz
-```
+- Consume `order.placed` and `payment.completed` events from NATS JetStream.
+- Create notification records in the dedicated `kathputli_notification` database.
+- Expose authenticated APIs for customers to list their notifications and mark a notification as read.
+- Provide `/healthz` and `/readyz`.
+
+## Local port
+
+- HTTP: `8088`
+- PostgreSQL database: `kathputli_notification`
+- NATS: `4222`
+
+## APIs
+
+GET `/healthz`
+
+GET `/readyz`
+
+GET `/api/notifications`
+
+GET `/api/notifications/{id}`
+
+PATCH `/api/notifications/{id}/read`
+
+All `/api/notifications` endpoints require a JWT Bearer token.
+
+## Events
+
+Consumed:
+
+- `order.placed`
+- `payment.completed`
+
+Shared stream:
+
+- `KATHPUTLI_EVENTS`
+
+The service creates a customer notification for each supported event.
+
+No Dockerfile is included intentionally; Dockerfiles will be written separately during the containerization phase.

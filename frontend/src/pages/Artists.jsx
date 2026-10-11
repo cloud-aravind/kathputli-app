@@ -27,7 +27,7 @@ const artist = {
   name: 'Bhavya Rao',
   specialty: 'Contemporary Painter',
   location: 'New Delhi, India',
-  artworks: 129,
+  artworks: 6,
   followers: '2.5K',
   rating: '4.9',
   reviews: 128,
@@ -102,7 +102,11 @@ const artworks = [
 // ============================================================
 
 function formatPrice(price) {
-  return `$${price.toLocaleString('en-US')}`
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number(price) || 0)
 }
 
 

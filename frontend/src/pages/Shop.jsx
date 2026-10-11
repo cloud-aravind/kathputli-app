@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
   ChevronRight,
@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { artworksApi, mapArtwork } from '../api/artworks'
 
 
 // ============================================================
@@ -38,7 +39,7 @@ const categories = [
 // ARTWORK DATA
 // ============================================================
 
-const artworks = [
+const sampleArtworks = [
   {
     id: 1,
     title: 'Golden Reflections',
@@ -167,7 +168,37 @@ const CART_KEY = 'kathputli-cart'
 // ============================================================
 
 function formatPrice(price) {
-  return `$${price.toLocaleString('en-US')}`
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number(price) || 0)
+}
+
+function artworkIdentity(artwork) {
+  return [
+    String(artwork.title || '').trim().toLowerCase(),
+    String(artwork.artist || '').trim().toLowerCase(),
+    String(artwork.category || '').trim().toLowerCase(),
+  ].join('|')
+}
+
+function shopCatalogue(liveArtworks = []) {
+  const live = liveArtworks.filter(
+    (artwork) =>
+      artwork &&
+      String(artwork.category || '').trim().toLowerCase() !== 'traditional art'
+  )
+  const liveKeys = new Set(live.map(artworkIdentity))
+
+  const demonstration = sampleArtworks
+    .map((artwork) => ({
+      ...artwork,
+      id: `shop-demo-${artwork.id}`,
+    }))
+    .filter((artwork) => !liveKeys.has(artworkIdentity(artwork)))
+
+  return [...demonstration, ...live]
 }
 
 
@@ -176,9 +207,27 @@ function formatPrice(price) {
 // ============================================================
 
 export default function Shop() {
+  const [artworks, setArtworks] = useState(() => shopCatalogue())
   const [selectedCategory, setSelectedCategory] = useState('All Art')
   const [sortBy, setSortBy] = useState('Featured')
   const [openFilter, setOpenFilter] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    artworksApi.list()
+      .then((data) => {
+        if (!active) return
+        const rows = Array.isArray(data) ? data : (data.artworks || [])
+        setArtworks(shopCatalogue(rows.map(mapArtwork)))
+      })
+      .catch((error) => {
+        if (!active) return
+        setArtworks(shopCatalogue())
+        console.error('Unable to load Kathputli artworks:', error)
+        toast.error('Could not load artworks. Please try again later.')
+      })
+    return () => { active = false }
+  }, [])
 
   const [wishlist, setWishlist] = useState(() => {
     try {
@@ -217,11 +266,15 @@ export default function Shop() {
     }
 
     if (sortBy === 'Newest') {
-      result.sort((a, b) => b.id - a.id)
+      result.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.createdAt || 0).getTime()
+        const dateB = new Date(b.created_at || b.createdAt || 0).getTime()
+        return dateB - dateA
+      })
     }
 
     return result
-  }, [selectedCategory, sortBy])
+  }, [artworks, selectedCategory, sortBy])
 
 
   // ==========================================================

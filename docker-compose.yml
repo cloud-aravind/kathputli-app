@@ -1,0 +1,286 @@
+name: kathputli-app-backend
+
+services:
+
+  # ============================================================
+  # PostgreSQL
+  # ============================================================
+  postgres:
+    container_name: kathputli-postgres
+    image: postgres:17-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kathputli_auth
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+
+    ports:
+      - "5432:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kathputli_auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ============================================================
+  # Redis
+  # ============================================================
+  redis:
+    container_name: kathputli-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ============================================================
+  # NATS JetStream
+  # ============================================================
+  nats:
+    container_name: kathputli-nats
+    image: nats:2-alpine
+    restart: unless-stopped
+
+    command: ["-js", "-m", "8222"]
+
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8222/healthz >/dev/null 2>&1 || exit 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ============================================================
+  # Auth Service
+  # ============================================================
+  auth-service:
+    container_name: kathputli-auth
+    image: kathputli-auth-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8083
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: kathputli_auth
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+
+    ports:
+      - "8083:8083"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+  # ============================================================
+  # User Service
+  # ============================================================
+  user-service:
+    container_name: kathputli-user
+    image: kathputli-user-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8082
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: kathputli_user
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+
+    ports:
+      - "8082:8082"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+  # ============================================================
+  # Artist Service
+  # ============================================================
+  artist-service:
+    container_name: kathputli-artist
+    image: kathputli-artist-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8084
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kathputli_artist
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+
+    ports:
+      - "8084:8084"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+  # ============================================================
+  # Artwork Service
+  # ============================================================
+  artwork-service:
+    container_name: kathputli-artwork
+    image: kathputli-artwork-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8085
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kathputli_artwork
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+      ARTIST_SERVICE_URL: http://artist-service:8084
+
+    ports:
+      - "8085:8085"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+  # ============================================================
+  # Order Service
+  # ============================================================
+  order-service:
+    container_name: kathputli-order
+    image: kathputli-order-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8086
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kathputli_order
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+      ARTWORK_SERVICE_URL: http://artwork-service:8085
+
+    ports:
+      - "8086:8086"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      artwork-service:
+        condition: service_started
+
+
+  # ============================================================
+  # Payment Service
+  # ============================================================
+  payment-service:
+    container_name: kathputli-payment
+    image: kathputli-payment-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8087
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kathputli_payment
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+
+    ports:
+      - "8087:8087"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+  # ============================================================
+  # Notification Service
+  # ============================================================
+  notification-service:
+    container_name: kathputli-notification
+    image: kathputli-notification-service:dev
+    restart: unless-stopped
+
+    environment:
+      PORT: 8088
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kathputli_notification
+      JWT_SECRET: kathputli-dev-secret
+      NATS_URL: nats://nats:4222
+
+    ports:
+      - "8088:8088"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+  # ============================================================
+  # Delivery Service
+  # ============================================================
+  delivery-service:
+    container_name: kathputli-delivery
+    image: kathputli-delivery-service:dev
+    restart: unless-stopped
+
+    environment:
+        PORT: 8089
+        DATABASE_URL: postgres://postgres:postgres@postgres:5432/kathputli_delivery
+        JWT_SECRET: kathputli-dev-secret
+        NATS_URL: nats://nats:4222
+        DELIVERY_AGENT_ID: 24d986a1-ab90-47f4-a684-365b59f1f4d2
+        DELIVERY_AGENT_NAME: Arun Delivery
+        DELIVERY_AGENT_PHONE: +91-9000000001
+
+    ports:
+      - "8089:8089"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+
+# ==============================================================
+# Volumes
+# ==============================================================
+volumes:
+  postgres_data:

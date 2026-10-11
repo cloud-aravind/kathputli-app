@@ -1,72 +1,38 @@
-// Package config loads all runtime configuration from environment variables
-// into a single typed Config struct that the rest of the service depends on.
 package config
 
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
-// Config holds every environment-driven setting the service needs.
 type Config struct {
-	ServiceName string
-	Port        string
-	LogLevel    string
-
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSchema   string
-
-	RedisAddr     string
-	RedisPassword string
-
-	NATSURL string
-
-	JWTSecret string
-	JWTExpiry time.Duration
+	Port, DBHost, DBPort, DBUser, DBPassword, DBName, DBSSLMode, JWTSecret string
+	JWTExpiry                                                              time.Duration
+	NATSURL                                                                string
 }
 
-// getenv returns the env var value or a fallback default.
-func getenv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
+func Load() Config {
+	return Config{Port: getEnv("PORT", "8083"), DBHost: getEnv("DB_HOST", "localhost"), DBPort: getEnv("DB_PORT", "5432"), DBUser: getEnv("DB_USER", "postgres"), DBPassword: getEnv("DB_PASSWORD", "postgres"), DBName: getEnv("DB_NAME", "kathputli_auth"), DBSSLMode: getEnv("DB_SSLMODE", "disable"), JWTSecret: getEnv("JWT_SECRET", "change-me-in-production"), JWTExpiry: getDuration("JWT_EXPIRY", 24*time.Hour), NATSURL: getEnv("NATS_URL", "nats://localhost:4222")}
+}
+func (c Config) DatabaseURL() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSSLMode)
+}
+func getEnv(k, f string) string {
+	if v := os.Getenv(k); v != "" {
 		return v
 	}
-	return def
+	return f
 }
-
-// Load reads the environment into a Config, applying sensible defaults.
-func Load() *Config {
-	expiry, err := time.ParseDuration(getenv("JWT_EXPIRY", "24h"))
-	if err != nil {
-		expiry = 24 * time.Hour
+func getDuration(k string, f time.Duration) time.Duration {
+	v := os.Getenv(k)
+	if v == "" {
+		return f
 	}
-	return &Config{
-		ServiceName:   getenv("SERVICE_NAME", "auth-service"),
-		Port:          getenv("PORT", "8080"),
-		LogLevel:      getenv("LOG_LEVEL", "info"),
-		DBHost:        getenv("DB_HOST", "localhost"),
-		DBPort:        getenv("DB_PORT", "5432"),
-		DBUser:        getenv("DB_USER", "postgres"),
-		DBPassword:    getenv("DB_PASSWORD", "postgres"),
-		DBName:        getenv("DB_NAME", "cloudkitchen"),
-		DBSchema:      getenv("DB_SCHEMA", "auth"),
-		RedisAddr:     getenv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: getenv("REDIS_PASSWORD", ""),
-		NATSURL:   getenv("NATS_URL", "nats://localhost:4222"),
-		JWTSecret:     getenv("JWT_SECRET", "change-me-in-production"),
-		JWTExpiry:     expiry,
+	n, e := strconv.Atoi(v)
+	if e != nil || n <= 0 {
+		return f
 	}
-}
-
-// DSN builds the pgx connection string. search_path is set to the service
-// schema so all unqualified table references resolve to it.
-func (c *Config) DSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s",
-		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSchema,
-	)
+	return time.Duration(n) * time.Second
 }

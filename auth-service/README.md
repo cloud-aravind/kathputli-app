@@ -1,20 +1,15 @@
-# auth-service
+# Kathputli Auth Service
 
-CloudKitchen microservice. Go + Gin, clean architecture.
+Authentication and JWT issuance service.
 
-## Layout
-- `cmd/`                 — entrypoint (`main.go`)
-- `internal/handler/`    — Gin HTTP handlers (transport layer)
-- `internal/service/`    — business logic
-- `internal/repository/` — PostgreSQL data access
-- `internal/model/`      — domain structs
-- `internal/middleware/` — JWT auth, RBAC, logging, metrics
-- `migrations/`          — SQL migrations for this service's schema
-- `Dockerfile`           — multi-stage, non-root, distroless
+Endpoints:
+- POST `/api/auth/register`
+- POST `/api/auth/login`
+- GET `/api/auth/me`
+- GET `/healthz`
+- GET `/readyz`
 
-## Run locally
-```bash
-go mod tidy
-SERVICE_NAME=auth-service PORT=8080 go run ./cmd
-curl localhost:8080/healthz
-```
+After successful registration, Auth publishes a `user.created` event to NATS JetStream.
+
+Stream: `KATHPUTLI_EVENTS`
+Subject: `user.created`

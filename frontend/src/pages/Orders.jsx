@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { ordersApi } from '../api/orders'
+import { normalizeOrder } from '../api/orderFormat'
+import toast from 'react-hot-toast'
 import {
   ArrowRight,
   CheckCircle2,
@@ -26,35 +29,19 @@ export default function Orders() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    try {
-      const storedOrders = JSON.parse(
-        localStorage.getItem(ORDERS_KEY) || '[]'
-      )
-
-      const lastOrder = JSON.parse(
-        localStorage.getItem(LAST_ORDER_KEY) || 'null'
-      )
-
-      let combinedOrders = Array.isArray(storedOrders)
-        ? storedOrders
-        : []
-
-      if (lastOrder?.id) {
-        const exists = combinedOrders.some(
-          (order) => order.id === lastOrder.id
-        )
-
-        if (!exists) {
-          combinedOrders = [lastOrder, ...combinedOrders]
-        }
-      }
-
-      setOrders(combinedOrders)
-    } catch {
-      setOrders([])
-    } finally {
-      setLoading(false)
-    }
+    let active = true
+    ordersApi.list()
+      .then((rows) => {
+        if (active) setOrders(rows.map(normalizeOrder))
+      })
+      .catch((error) => {
+        if (!active) return
+        console.error('Unable to load orders:', error)
+        setOrders([])
+        toast.error(error?.response?.data?.error || 'Unable to load your orders.')
+      })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   return (

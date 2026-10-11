@@ -269,7 +269,7 @@ export function AuthProvider({ children }) {
   // The backend currently uses:
   //
   // customer
-  // restaurant-admin   → Kathputli Artist
+  // artist-admin       → Kathputli Artist
   // admin
   // delivery-agent
   //

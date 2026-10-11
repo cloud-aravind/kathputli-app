@@ -27,9 +27,8 @@ const ROLES = [
     hint: 'Discover & collect art',
   },
   {
-    // Keep the existing backend role so registration remains
-    // compatible with the current CloudKitchen authentication API.
-    value: 'restaurant-admin',
+    // Kathputli artist role supported by the backend.
+    value: 'artist-admin',
     label: 'Artist',
     Icon: Palette,
     hint: 'Create & sell artwork',
@@ -86,9 +85,9 @@ export default function Register() {
        */
       if (data?.token) {
         navigate(
-          form.role === 'restaurant-admin'
-            ? '/admin/restaurant'
-            : '/restaurants',
+          form.role === 'artist-admin'
+            ? '/artist/dashboard'
+            : '/shop',
           { replace: true }
         )
       } else {
@@ -96,7 +95,8 @@ export default function Register() {
       }
     } catch (err) {
       toast.error(
-        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
           'Could not create account.'
       )
     } finally {

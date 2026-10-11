@@ -1,21 +1,33 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Vite config. During dev we proxy /api to the backend ingress so the SPA can
-// use relative URLs and avoid CORS. The proxy target comes from VITE_API_BASE_URL.
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  const target = env.VITE_API_BASE_URL || 'http://localhost:8080'
-  return {
-    plugins: [react()],
-    server: {
-      port: 5173,
-      proxy: {
-        '/api': {
-          target,
-          changeOrigin: true,
-        },
+// Local development routing for Kathputli's eight Go services.
+// Keep the more-specific cross-service routes before /api/artists and /api/orders.
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      // Artist categories/artworks are implemented by Artwork Service, not Artist Service.
+      '^/api/artists/[^/]+/(categories|artworks)(/|$)': {
+        target: 'http://localhost:8085',
+        changeOrigin: true,
       },
+
+      // Payment Service owns this cross-service lookup route.
+      '^/api/orders/[^/]+/payment$': {
+        target: 'http://localhost:8087',
+        changeOrigin: true,
+      },
+
+      '/api/auth': { target: 'http://localhost:8083', changeOrigin: true },
+      '/api/users': { target: 'http://localhost:8082', changeOrigin: true },
+      '/api/artists': { target: 'http://localhost:8084', changeOrigin: true },
+      '/api/artworks': { target: 'http://localhost:8085', changeOrigin: true },
+      '/api/orders': { target: 'http://localhost:8086', changeOrigin: true },
+      '/api/payments': { target: 'http://localhost:8087', changeOrigin: true },
+      '/api/notifications': { target: 'http://localhost:8088', changeOrigin: true },
+      '/api/deliveries': { target: 'http://localhost:8089', changeOrigin: true },
     },
-  }
+  },
 })
