@@ -41,7 +41,7 @@ func main() {
 		log.Fatalf("failed to ensure NATS stream: %v", err)
 	}
 
-	artistClient := client.NewArtistClient(cfg.ArtistServiceURL)
+	artistClient := client.NewArtistClient(cfg.ArtistServiceURL, cfg.ArtistInternalAPIToken)
 	svc := service.NewArtworkService(repo, natsClient, artistClient)
 	h := handler.New(svc, cfg.JWTSecret)
 

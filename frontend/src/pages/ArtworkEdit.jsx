@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -7,114 +7,8 @@ import {
   Save,
   X,
 } from 'lucide-react'
-
-const artworks = [
-  {
-    id: 1,
-    title: 'Golden Reflections',
-    description:
-      'A warm contemporary landscape exploring autumn light, reflections, and quiet moments in nature.',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    dimensions: '24 × 30 inch',
-    price: 650,
-    quantity: 1,
-    availability: 'Available',
-    tags: 'autumn, landscape, nature, light',
-    status: 'Published',
-    image: '/bhavya-pic-1.png',
-  },
-  {
-    id: 2,
-    title: 'Blooming Peonies',
-    description:
-      'A delicate floral composition inspired by the softness and natural beauty of blooming peonies.',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    dimensions: '20 × 24 inch',
-    price: 600,
-    quantity: 1,
-    availability: 'Available',
-    tags: 'flowers, peonies, floral, nature',
-    status: 'Published',
-    image: '/bhavya-pic-2.png',
-  },
-  {
-    id: 3,
-    title: 'Mountain Serenity',
-    description:
-      'A peaceful mountain landscape capturing the stillness of an alpine lake surrounded by distant peaks.',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    dimensions: '18 × 24 inch',
-    price: 580,
-    quantity: 1,
-    availability: 'Available',
-    tags: 'mountains, lake, landscape, serenity',
-    status: 'Published',
-    image: '/bhavya-pic-3.png',
-  },
-  {
-    id: 4,
-    title: 'City Lights',
-    description:
-      'A contemporary city scene inspired by reflections, movement, and the atmosphere of a rainy evening.',
-    category: 'Paintings',
-    collection: 'Everyday Moments',
-    medium: 'Acrylic on Canvas',
-    dimensions: '20 × 28 inch',
-    price: 540,
-    quantity: 1,
-    availability: 'Available',
-    tags: 'city, rain, lights, urban',
-    status: 'Draft',
-    image: '/bhavya-pic-4.png',
-  },
-  {
-    id: 5,
-    title: 'Sunset Hues',
-    description:
-      'A vibrant interpretation of a coastal sunset with layered tones of warm evening light.',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    dimensions: '16 × 20 inch',
-    price: 480,
-    quantity: 1,
-    availability: 'Available',
-    tags: 'sunset, sea, landscape, evening',
-    status: 'Under Review',
-    image: '/bhavya-pic-5.png',
-  },
-  {
-    id: 6,
-    title: 'Wildflowers',
-    description:
-      'A soft and expressive meadow scene celebrating the organic beauty of wildflowers in bloom.',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    dimensions: '18 × 24 inch',
-    price: 490,
-    quantity: 1,
-    availability: 'Sold',
-    tags: 'wildflowers, meadow, floral, nature',
-    status: 'Sold',
-    image: '/bhavya-pic-6.png',
-  },
-]
-
-const categories = [
-  'Paintings',
-  'Digital Art',
-  'Traditional Art',
-  'Famous Artworks',
-  'Sculptures',
-  'Photography',
-]
+import toast from 'react-hot-toast'
+import { artworksApi } from '../api/artworks'
 
 const collections = [
   'Nature & Light',
@@ -128,30 +22,52 @@ const availabilityOptions = ['Available', 'Unavailable']
 export default function ArtworkEdit() {
   const { id } = useParams()
   const navigate = useNavigate()
-
-  const artwork = useMemo(
-    () => artworks.find((item) => String(item.id) === String(id)),
-    [id]
-  )
-
-  const [formData, setFormData] = useState(() => ({
-    title: artwork?.title || '',
-    description: artwork?.description || '',
-    category: artwork?.category || 'Paintings',
-    collection: artwork?.collection || 'Nature & Light',
-    medium: artwork?.medium || '',
-    dimensions: artwork?.dimensions || '',
-    price: artwork?.price || '',
-    quantity: artwork?.quantity || 1,
-    availability: artwork?.availability || 'Available',
-    tags: artwork?.tags || '',
-    status: artwork?.status || 'Draft',
-  }))
-
-  const [imagePreview, setImagePreview] = useState(artwork?.image || '')
+  const [artwork, setArtwork] = useState(null)
+  const [categories, setCategories] = useState([])
+  const [formData, setFormData] = useState({
+    title: '', description: '', category: '', collection: '', medium: '',
+    dimensions: '', price: '', quantity: 1, availability: 'Available',
+    tags: '', status: 'Inactive',
+  })
+  const [imagePreview, setImagePreview] = useState('')
   const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [imageChanged, setImageChanged] = useState(false)
 
-  if (!artwork) {
+  useEffect(() => {
+    let active = true
+    artworksApi.get(id)
+      .then(async (record) => {
+        if (!active) return
+        const categoryRows = record.artist_id
+          ? await artworksApi.listCategories(record.artist_id).catch(() => [])
+          : []
+        if (!active) return
+        setArtwork(record)
+        setCategories(Array.isArray(categoryRows) ? categoryRows : [])
+        setImagePreview(record.image_url || '')
+        setFormData((current) => ({
+          ...current,
+          title: record.title || '',
+          description: record.description || '',
+          category: record.category_id || '',
+          price: String(record.price ?? ''),
+          quantity: String(record.stock ?? 0),
+          availability: Number(record.stock) > 0 ? 'Available' : 'Unavailable',
+          status: record.is_active ? 'Published' : 'Inactive',
+        }))
+      })
+      .catch((error) => {
+        if (active) toast.error(error?.response?.data?.error || 'Could not load artwork.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => { active = false }
+  }, [id])
+
+  if (loading || !artwork) {
     return (
       <div className="min-h-screen bg-[#f8f5ef] px-6 py-16">
         <div className="mx-auto max-w-3xl text-center">
@@ -160,11 +76,11 @@ export default function ArtworkEdit() {
           </p>
 
           <h1 className="mt-4 font-serif text-4xl text-stone-900">
-            Artwork not found
+            {loading ? 'Loading artwork…' : 'Artwork unavailable'}
           </h1>
 
           <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-stone-500">
-            The artwork you are trying to edit could not be found.
+            {loading ? 'Loading the saved backend artwork.' : 'The artwork could not be loaded. Check that the ID is valid and that this account owns it before saving changes.'}
           </p>
 
           <Link
@@ -197,17 +113,41 @@ export default function ArtworkEdit() {
 
     const previewUrl = URL.createObjectURL(file)
     setImagePreview(previewUrl)
+    setImageChanged(true)
     setSaved(false)
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-
-    setSaved(true)
-
-    window.setTimeout(() => {
-      setSaved(false)
-    }, 3000)
+    const price = Number(formData.price)
+    const stock = Number(formData.quantity)
+    if (!formData.title.trim() || !formData.description.trim() || !String(formData.price).trim() || !Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0) {
+      toast.error('Enter a title, description, non-negative price, and non-negative stock.')
+      return
+    }
+    if (imageChanged) {
+      toast.error('The selected image is only a local preview; image upload is not supported.')
+      return
+    }
+    setSaving(true)
+    try {
+      await artworksApi.update(id, {
+        category_id: formData.category || null,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        price,
+        currency: artwork.currency || 'INR',
+        image_url: artwork.image_url || '',
+        stock: formData.availability === 'Available' ? stock : 0,
+        is_active: formData.status === 'Published',
+      })
+      setSaved(true)
+      toast.success('Artwork changes saved.')
+    } catch (error) {
+      toast.error(error?.response?.data?.error || 'Could not save artwork changes.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -254,6 +194,9 @@ export default function ArtworkEdit() {
 
       {/* Form */}
       <main className="mx-auto max-w-7xl px-6 py-10 sm:px-8 lg:px-10 lg:py-14">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900" role="status">
+          The backend saves title, description, category, price, stock, active status, and the existing image URL. It does not support file uploads, collections, medium, dimensions, or tags.
+        </div>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
             {/* Image */}
@@ -297,7 +240,7 @@ export default function ArtworkEdit() {
               </label>
 
               <p className="mt-3 text-center text-xs leading-5 text-stone-400">
-                Recommended: high-quality artwork image in a 4:3 ratio.
+                  Local preview only; changing the image will not upload it.
               </p>
 
               {/* Status */}
@@ -316,10 +259,8 @@ export default function ArtworkEdit() {
                   onChange={handleChange}
                   className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-700 outline-none transition focus:border-stone-700"
                 >
-                  <option value="Published">Published</option>
-                  <option value="Draft">Draft</option>
-                  <option value="Under Review">Under Review</option>
-                  <option value="Sold">Sold</option>
+                  <option value="Published">Active</option>
+                  <option value="Inactive">Inactive</option>
                 </select>
               </div>
             </section>
@@ -394,9 +335,12 @@ export default function ArtworkEdit() {
                       onChange={handleChange}
                       className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-700 outline-none transition focus:border-stone-700"
                     >
+                      {!categories.some((category) => category.id === formData.category) && formData.category && (
+                        <option value={formData.category}>{artwork.category_name || 'Current category'}</option>
+                      )}
                       {categories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
+                        <option key={category.id} value={category.id}>
+                          {category.name}
                         </option>
                       ))}
                     </select>
@@ -508,7 +452,7 @@ export default function ArtworkEdit() {
                       id="quantity"
                       name="quantity"
                       type="number"
-                      min="1"
+                      min="0"
                       value={formData.quantity}
                       onChange={handleChange}
                       className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm text-stone-800 outline-none transition focus:border-stone-700"
@@ -584,10 +528,11 @@ export default function ArtworkEdit() {
 
                   <button
                     type="submit"
+                    disabled={saving}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-[#6f1d2f] px-7 py-3 text-sm font-medium text-white transition hover:bg-[#5b1727]"
                   >
                     <Save size={17} />
-                    Save changes
+                    {saving ? 'Saving…' : 'Save changes'}
                   </button>
                 </div>
               </div>

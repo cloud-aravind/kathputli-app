@@ -105,6 +105,58 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*model.Artist, 
 	return &artist, nil
 }
 
+func (r *Repository) GetPublicByID(ctx context.Context, id uuid.UUID) (*model.PublicArtist, error) {
+	const query = `
+		SELECT id, name, city, state, country, bio
+		FROM artists
+		WHERE id = $1
+	`
+
+	var artist model.PublicArtist
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&artist.ID,
+		&artist.Name,
+		&artist.City,
+		&artist.State,
+		&artist.Country,
+		&artist.Bio,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &artist, nil
+}
+
+func (r *Repository) ListPublic(ctx context.Context) ([]model.PublicArtist, error) {
+	const query = `
+		SELECT id, name, city, state, country, bio
+		FROM artists
+		ORDER BY name, id
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	artists := make([]model.PublicArtist, 0)
+	for rows.Next() {
+		var artist model.PublicArtist
+		if err := rows.Scan(&artist.ID, &artist.Name, &artist.City, &artist.State, &artist.Country, &artist.Bio); err != nil {
+			return nil, err
+		}
+		artists = append(artists, artist)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return artists, nil
+}
+
 func (r *Repository) GetByUserID(ctx context.Context, userID uuid.UUID) (*model.Artist, error) {
 	const query = `
         SELECT id, user_id, name, email, phone, address, city, state, country, bio, created_at, updated_at

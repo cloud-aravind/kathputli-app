@@ -67,6 +67,9 @@ func main() {
 		artworkClient,
 		nb,
 	)
+	if err := nb.StartPaymentStatusConsumer(ctx, svc); err != nil {
+		log.Fatalf("start payment status consumer: %v", err)
+	}
 
 	// HTTP router
 	router := gin.New()

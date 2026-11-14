@@ -6,8 +6,11 @@ import {
   ShoppingBag,
   Trash2,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { keepValidArtworkRecords, uuidString } from '../api/ids'
 
 const WISHLIST_KEY = 'kathputli-wishlist'
+const ITEMS_UPDATED_EVENT = 'kathputli-items-updated'
 
 export default function Wishlist() {
   const [wishlist, setWishlist] = useState([])
@@ -15,9 +18,17 @@ export default function Wishlist() {
   useEffect(() => {
     try {
       const savedWishlist = localStorage.getItem(WISHLIST_KEY)
+      const stored = savedWishlist ? JSON.parse(savedWishlist) : []
+      const validItems = keepValidArtworkRecords(stored)
 
-      if (savedWishlist) {
-        setWishlist(JSON.parse(savedWishlist))
+      setWishlist(validItems)
+
+      if (Array.isArray(stored) && validItems.length !== stored.length) {
+        localStorage.setItem(WISHLIST_KEY, JSON.stringify(validItems))
+        window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
+        toast.error(
+          'Unavailable demo artworks were removed from your wishlist.'
+        )
       }
     } catch (error) {
       console.error('Unable to load wishlist:', error)
@@ -35,16 +46,24 @@ export default function Wishlist() {
       WISHLIST_KEY,
       JSON.stringify(updatedWishlist)
     )
+    window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
   }
 
   const moveToCart = (artwork) => {
+    const artworkId = uuidString(artwork?.id)
+    if (!artworkId) {
+      toast.error('This demo artwork is not available for checkout.')
+      removeFromWishlist(artwork.id)
+      return
+    }
+
     try {
-      const existingCart = JSON.parse(
-        localStorage.getItem('kathputli-cart') || '[]'
+      const existingCart = keepValidArtworkRecords(
+        JSON.parse(localStorage.getItem('kathputli-cart') || '[]')
       )
 
       const alreadyInCart = existingCart.some(
-        (item) => item.id === artwork.id
+        (item) => item.id === artworkId
       )
 
       if (!alreadyInCart) {
@@ -52,6 +71,7 @@ export default function Wishlist() {
           ...existingCart,
           {
             ...artwork,
+            id: artworkId,
             quantity: 1,
           },
         ]
@@ -60,6 +80,7 @@ export default function Wishlist() {
           'kathputli-cart',
           JSON.stringify(updatedCart)
         )
+        window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
       }
 
       removeFromWishlist(artwork.id)

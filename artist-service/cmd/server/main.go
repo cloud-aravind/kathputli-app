@@ -42,7 +42,7 @@ func main() {
 	}
 
 	artistService := service.NewArtistService(repo, natsClient)
-	h := handler.New(artistService, cfg.JWTSecret)
+	h := handler.New(artistService, cfg.JWTSecret, cfg.InternalAPIToken)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

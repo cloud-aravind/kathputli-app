@@ -1,11 +1,21 @@
 import client from './client'
+import { uuidString } from './ids'
+
+export { isUuid as isBackendArtworkId } from './ids'
 
 // Artwork Service endpoints implemented by the Kathputli backend.
 export const artworksApi = {
   list: () => client.get('/api/artworks').then((r) => r.data),
-  get: (id) => client.get(`/api/artworks/${id}`).then((r) => r.data),
-  listByArtist: (artistId) =>
-    client.get(`/api/artists/${artistId}/artworks`).then((r) => r.data),
+  get: (id) => {
+    const artworkId = uuidString(id)
+    if (!artworkId) return Promise.reject(new Error('invalid artwork id'))
+    return client.get(`/api/artworks/${artworkId}`).then((r) => r.data)
+  },
+  listByArtist: (artistId) => {
+    const id = uuidString(artistId)
+    if (!id) return Promise.reject(new Error('invalid artist id'))
+    return client.get(`/api/artists/${id}/artworks`).then((r) => r.data)
+  },
   listCategories: (artistId) =>
     client.get(`/api/artists/${artistId}/categories`).then((r) => r.data),
   createCategory: (artistId, payload) =>
@@ -28,15 +38,6 @@ const CATEGORY_IMAGES = {
   Photography: '/category-photography.jpg',
 }
 
-const BHAVYA_GALLERY_IMAGES = [
-  '/bhavya-pic-1.png',
-  '/bhavya-pic-2.png',
-  '/bhavya-pic-3.png',
-  '/bhavya-pic-4.png',
-  '/bhavya-pic-5.png',
-  '/bhavya-pic-6.png',
-]
-
 function normalizeCategory(value) {
   const raw = String(value || '').trim()
   if (CATEGORY_IMAGES[raw]) return raw
@@ -56,7 +57,7 @@ function normalizeCategory(value) {
     photography: 'Photography',
   }
 
-  return aliases[key] || raw || 'Traditional Art'
+  return aliases[key] || raw || 'Uncategorized'
 }
 
 function isUsableImage(url) {
@@ -67,29 +68,49 @@ function isUsableImage(url) {
   return value.startsWith('/') || value.startsWith('http://') || value.startsWith('https://')
 }
 
-function resolveArtworkImage(artwork, category, artist, index) {
+function resolveArtworkImage(artwork, category) {
   const provided = artwork.image_url || artwork.image
   if (isUsableImage(provided)) return provided.trim()
-
-  if (/bhavya\s+rao/i.test(artist)) {
-    return BHAVYA_GALLERY_IMAGES[index % BHAVYA_GALLERY_IMAGES.length]
-  }
 
   return CATEGORY_IMAGES[category] || CATEGORY_IMAGES['Traditional Art']
 }
 
-export function mapArtwork(artwork, index = 0) {
-  const artist = artwork.artist_name || artwork.artist || 'Independent Artist'
-  const category = normalizeCategory(artwork.category_name || artwork.category)
+// Display-only creator attribution parsed from catalogue copy.
+// Never treat this value as artists.id or as an owning artist profile.
+export function extractCreditedName(artwork) {
+  const desc = String(artwork?.description || '').trim()
+  if (desc) {
+    const match = desc.match(/\bby\s+([A-Za-z\s]+?)(?:\s*[-–—,]|\s*$)/i)
+    if (match && match[1]) {
+      const extracted = match[1].trim()
+      if (extracted.length > 2 && !/^(the|a|an)$/i.test(extracted)) {
+        return extracted
+      }
+    }
+  }
+
+  return ''
+}
+
+export function mapArtwork(artwork) {
+  const creditedName = extractCreditedName(artwork)
+  const rawCategory = artwork.category_name || artwork.category
+  const category = normalizeCategory(rawCategory)
+  const imageMissing = !isUsableImage(artwork.image_url || artwork.image)
 
   return {
     ...artwork,
-    id: artwork.id,
+    id: uuidString(artwork.id) || artwork.id,
+    artist_id: uuidString(artwork.artist_id),
     title: artwork.title,
-    artist,
+    credited_name: creditedName,
+    // Owning profile name is resolved from Artist Service via artist_id.
+    artist: '',
     price: Number(artwork.price || 0),
+    currency: String(artwork.currency || 'INR').toUpperCase(),
     category,
-    image: resolveArtworkImage(artwork, category, artist, index),
+    image: resolveArtworkImage(artwork, category),
+    image_missing: imageMissing,
     quantity: 1,
     stock: Number(artwork.stock || 0),
     is_active: Boolean(artwork.is_active),

@@ -12,7 +12,12 @@ import (
 	"github.com/kathputli/order-service/internal/model"
 )
 
-const streamName = "KATHPUTLI_EVENTS"
+const (
+	streamName              = "KATHPUTLI_EVENTS"
+	PaymentCompletedSubject = "payment.completed"
+	PaymentFailedSubject    = "payment.failed"
+	PaymentStatusConsumer   = "order-service-payment-status"
+)
 
 type Broker struct {
 	nc *nats.Conn
@@ -100,7 +105,6 @@ func (b *Broker) EnsureStream(ctx context.Context) error {
 }
 
 // PublishOrderPlaced publishes the event emitted when an order is created.
-// The Order Service is a publisher only; it does not consume payment events.
 func (b *Broker) PublishOrderPlaced(
 	event model.OrderPlacedEvent,
 ) error {
@@ -134,4 +138,61 @@ func (b *Broker) PublishOrderPlaced(
 	)
 
 	return nil
+}
+
+type PaymentEventHandler interface {
+	HandlePaymentEvent(context.Context, string, model.PaymentEvent) error
+}
+
+// StartPaymentStatusConsumer handles completion and failure events with one
+// durable consumer. JetStream redelivers unacknowledged events after errors.
+func (b *Broker) StartPaymentStatusConsumer(ctx context.Context, handler PaymentEventHandler) error {
+	js, err := b.nc.JetStream()
+	if err != nil {
+		return fmt.Errorf("jetstream: %w", err)
+	}
+	consumer, err := js.PullSubscribe(
+		"payment.*",
+		PaymentStatusConsumer,
+		nats.BindStream(streamName),
+		nats.ManualAck(),
+		nats.AckWait(30*time.Second),
+		nats.MaxDeliver(5),
+	)
+	if err != nil {
+		return fmt.Errorf("payment status consumer: %w", err)
+	}
+	go consumePaymentStatus(ctx, consumer, handler)
+	return nil
+}
+
+func consumePaymentStatus(ctx context.Context, consumer *nats.Subscription, handler PaymentEventHandler) {
+	for ctx.Err() == nil {
+		messages, err := consumer.Fetch(1, nats.MaxWait(5*time.Second))
+		if err != nil {
+			if ctx.Err() != nil || err == nats.ErrTimeout {
+				continue
+			}
+			log.Printf("payment status fetch failed: %v", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		for _, msg := range messages {
+			var event model.PaymentEvent
+			if err := json.Unmarshal(msg.Data, &event); err != nil {
+				log.Printf("invalid payment event: %v", err)
+				_ = msg.Term()
+				continue
+			}
+			if err := handler.HandlePaymentEvent(ctx, msg.Subject, event); err != nil {
+				log.Printf("payment event handling failed: subject=%s order_id=%s: %v", msg.Subject, event.OrderID, err)
+				_ = msg.NakWithDelay(time.Second)
+				continue
+			}
+			if err := msg.Ack(); err != nil {
+				log.Printf("payment event ack failed: subject=%s order_id=%s: %v", msg.Subject, event.OrderID, err)
+			}
+		}
+	}
 }

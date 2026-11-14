@@ -313,7 +313,7 @@ export default function Register() {
                 id="password"
                 name="password"
                 type="password"
-                minLength={6}
+                minLength={8}
                 label="Password"
                 value={form.password}
                 onChange={update}

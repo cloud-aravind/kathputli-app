@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
@@ -27,7 +28,8 @@ const TABS = [
 ]
 
 export default function Profile() {
-  const { user, setUser } = useAuth()
+  const { user, setUser, logout } = useAuth()
+  const navigate = useNavigate()
 
   const [tab, setTab] = useState('details')
 
@@ -82,6 +84,11 @@ export default function Profile() {
     } catch {
       toast.error('Could not add address.')
     }
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -280,6 +287,12 @@ export default function Profile() {
             ))}
         </motion.div>
       </AnimatePresence>
+
+      <div className="mt-6 flex justify-end">
+        <Button type="button" onClick={handleLogout}>
+          Logout
+        </Button>
+      </div>
     </div>
   )
 }

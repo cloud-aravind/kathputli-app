@@ -21,6 +21,16 @@ type Artist struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// PublicArtist contains only fields intended for unauthenticated catalogue use.
+type PublicArtist struct {
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	City    string    `json:"city"`
+	State   string    `json:"state,omitempty"`
+	Country string    `json:"country,omitempty"`
+	Bio     string    `json:"bio,omitempty"`
+}
+
 type CreateArtistRequest struct {
 	Name    string `json:"name"`
 	Email   string `json:"email"`
@@ -44,7 +54,7 @@ type UpdateArtistRequest struct {
 }
 
 type ArtistCreatedEvent struct {
-	EventID string `json:"event_id"`
+	EventID   string    `json:"event_id"`
 	Event     string    `json:"event"`
 	ArtistID  uuid.UUID `json:"artist_id"`
 	UserID    uuid.UUID `json:"user_id"`

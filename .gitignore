@@ -1,0 +1,43 @@
+# Local environment files. Keep committed example templates visible.
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Terraform generated state, plans, and working directories
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+*.plan
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local build and test outputs
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.test
+*.out
+bin/
+tmp/

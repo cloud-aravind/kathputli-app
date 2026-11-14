@@ -1,8 +1,44 @@
 import { Heart, ShoppingBag, UserCircle, Search } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
+
+const CART_KEY = 'kathputli-cart'
+const WISHLIST_KEY = 'kathputli-wishlist'
+const ITEMS_UPDATED_EVENT = 'kathputli-items-updated'
+
+function readItemCounts() {
+  const readItems = (key) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) || '[]')
+    } catch {
+      return []
+    }
+  }
+
+  return {
+    wishlist: readItems(WISHLIST_KEY).length,
+    cart: readItems(CART_KEY).reduce(
+      (total, item) => total + Number(item.quantity || 0),
+      0
+    ),
+  }
+}
 
 export default function Navbar() {
   const location = useLocation()
+  const [itemCounts, setItemCounts] = useState(readItemCounts)
+
+  useEffect(() => {
+    const updateCounts = () => setItemCounts(readItemCounts())
+
+    window.addEventListener(ITEMS_UPDATED_EVENT, updateCounts)
+    window.addEventListener('storage', updateCounts)
+
+    return () => {
+      window.removeEventListener(ITEMS_UPDATED_EVENT, updateCounts)
+      window.removeEventListener('storage', updateCounts)
+    }
+  }, [])
 
   const isAuthPage =
     location.pathname === '/login' ||
@@ -124,7 +160,7 @@ export default function Navbar() {
             <Heart size={25} strokeWidth={1.7} />
 
             <span className="absolute -right-2 -top-2 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#86151a] px-1 text-[10px] font-semibold text-white">
-              3
+              {itemCounts.wishlist}
             </span>
           </Link>
 
@@ -136,7 +172,7 @@ export default function Navbar() {
             <ShoppingBag size={25} strokeWidth={1.7} />
 
             <span className="absolute -right-2 -top-2 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-[#86151a] px-1 text-[10px] font-semibold text-white">
-              2
+              {itemCounts.cart}
             </span>
           </Link>
 

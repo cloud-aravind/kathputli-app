@@ -19,19 +19,21 @@ var (
 
 // ArtistClient validates artist ownership against the Artist Service.
 type ArtistClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL          string
+	internalAPIToken string
+	client           *http.Client
 }
 
-type artistResponse struct {
-	ID     uuid.UUID `json:"id"`
-	UserID uuid.UUID `json:"user_id"`
+type ownershipVerificationRequest struct {
+	ArtistID uuid.UUID `json:"artist_id"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
-func NewArtistClient(baseURL string) *ArtistClient {
+func NewArtistClient(baseURL, internalAPIToken string) *ArtistClient {
 	return &ArtistClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		client:  &http.Client{Timeout: 5 * time.Second},
+		baseURL:          strings.TrimRight(baseURL, "/"),
+		internalAPIToken: internalAPIToken,
+		client:           &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -40,12 +42,25 @@ func (c *ArtistClient) VerifyOwnership(ctx context.Context, userID, artistID uui
 	if userID == uuid.Nil || artistID == uuid.Nil {
 		return fmt.Errorf("invalid ownership identifiers")
 	}
+	if strings.TrimSpace(c.internalAPIToken) == "" {
+		return errors.New("artist internal API token is not configured")
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.baseURL+"/api/artists/"+artistID.String(), nil)
+	requestBody, err := json.Marshal(ownershipVerificationRequest{
+		ArtistID: artistID,
+		UserID:   userID,
+	})
+	if err != nil {
+		return fmt.Errorf("encode ownership verification request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.baseURL+"/internal/v1/artist-ownership/verify", strings.NewReader(string(requestBody)))
 	if err != nil {
 		return fmt.Errorf("build artist request: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("ARTIST_INTERNAL_API_TOKEN", c.internalAPIToken)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -53,20 +68,14 @@ func (c *ArtistClient) VerifyOwnership(ctx context.Context, userID, artistID uui
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return ErrNotFound
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("artist service returned status %d", resp.StatusCode)
-	}
-
-	var artist artistResponse
-	if err := json.NewDecoder(resp.Body).Decode(&artist); err != nil {
-		return fmt.Errorf("decode artist response: %w", err)
-	}
-
-	if artist.ID != artistID || artist.UserID != userID {
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+		return nil
+	case http.StatusForbidden:
 		return ErrForbidden
+	case http.StatusUnauthorized:
+		return errors.New("artist service rejected internal API token")
+	default:
+		return fmt.Errorf("artist service ownership verification returned status %d", resp.StatusCode)
 	}
-	return nil
 }

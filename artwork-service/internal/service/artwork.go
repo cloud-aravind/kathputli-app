@@ -108,9 +108,12 @@ func (s *ArtworkService) CreateArtwork(ctx context.Context, userID, artistID uui
 	return a, nil
 }
 
-func (s *ArtworkService) ListArtworks(ctx context.Context, artistID uuid.UUID) ([]model.Artwork, error) {
+func (s *ArtworkService) ListArtworks(ctx context.Context, userID, artistID uuid.UUID) ([]model.Artwork, error) {
 	if artistID == uuid.Nil {
 		return nil, ErrInvalidInput
+	}
+	if err := s.verifyOwnership(ctx, userID, artistID); err != nil {
+		return nil, err
 	}
 	return s.repo.ListArtworks(ctx, artistID)
 }

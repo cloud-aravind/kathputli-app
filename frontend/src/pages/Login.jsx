@@ -12,7 +12,7 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const from = location.state?.from?.pathname || '/restaurants'
+  const from = location.state?.from?.pathname || '/'
 
   const [form, setForm] = useState({
     email: '',
@@ -40,6 +40,7 @@ export default function Login() {
       navigate(from, { replace: true })
     } catch (err) {
       toast.error(
+        err?.response?.data?.error ||
         err?.response?.data?.message ||
           'Invalid email or password.'
       )

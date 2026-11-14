@@ -32,7 +32,26 @@ export default function Orders() {
     let active = true
     ordersApi.list()
       .then((rows) => {
-        if (active) setOrders(rows.map(normalizeOrder))
+        if (!active) return
+        let cached = {}
+        try {
+          const list = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]')
+          if (Array.isArray(list)) {
+            list.forEach((o) => { if (o?.id) cached[o.id] = o })
+          }
+        } catch {
+          // Ignore localStorage parsing error
+        }
+        const merged = rows.map((row) => {
+          const local = cached[row.id] || {}
+          return normalizeOrder({
+            ...local,
+            ...row,
+            paymentStatus: local.paymentStatus || row.paymentStatus,
+            shippingAddress: row.shipping_address || local.shippingAddress,
+          })
+        })
+        setOrders(merged)
       })
       .catch((error) => {
         if (!active) return
@@ -102,7 +121,7 @@ function OrderCard({ order, index }) {
     order.status || 'Order Placed'
 
   const paymentStatus =
-    order.paymentStatus || 'Confirmed'
+    order.paymentStatus || 'Pending'
 
   const firstItem = items[0]
 

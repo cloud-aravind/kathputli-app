@@ -18,92 +18,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-const initialArtworks = [
-  {
-    id: 1,
-    title: 'Golden Reflections',
-    artist: 'Bhavya Rao',
-    category: 'Paintings',
-    medium: 'Acrylic on Canvas',
-    price: 650,
-    submitted: '2 hours ago',
-    submittedDate: 'Sep 3, 2026',
-    status: 'Under Review',
-    image: '/bhavya-pic-1.png',
-    description:
-      'A contemporary painting exploring warm golden light, reflections, and the quiet beauty found in everyday moments.',
-  },
-  {
-    id: 2,
-    title: 'Blooming Peonies',
-    artist: 'Bhavya Rao',
-    category: 'Paintings',
-    medium: 'Acrylic on Canvas',
-    price: 600,
-    submitted: '5 hours ago',
-    submittedDate: 'Sep 3, 2026',
-    status: 'Under Review',
-    image: '/bhavya-pic-2.png',
-    description:
-      'A floral composition celebrating the softness, colour, and natural rhythm of blooming peonies.',
-  },
-  {
-    id: 3,
-    title: 'Mountain Serenity',
-    artist: 'Bhavya Rao',
-    category: 'Paintings',
-    medium: 'Acrylic on Canvas',
-    price: 580,
-    submitted: 'Yesterday',
-    submittedDate: 'Sep 2, 2026',
-    status: 'Under Review',
-    image: '/bhavya-pic-3.png',
-    description:
-      'A peaceful landscape inspired by mountain forms, open skies, and the stillness of nature.',
-  },
-  {
-    id: 4,
-    title: 'City Lights',
-    artist: 'Bhavya Rao',
-    category: 'Paintings',
-    medium: 'Acrylic on Canvas',
-    price: 540,
-    submitted: 'Yesterday',
-    submittedDate: 'Sep 2, 2026',
-    status: 'Under Review',
-    image: '/bhavya-pic-4.png',
-    description:
-      'A contemporary urban composition capturing the atmosphere, movement, and glow of a city after sunset.',
-  },
-  {
-    id: 5,
-    title: 'Sunset Hues',
-    artist: 'Bhavya Rao',
-    category: 'Paintings',
-    medium: 'Acrylic on Canvas',
-    price: 480,
-    submitted: '2 days ago',
-    submittedDate: 'Sep 1, 2026',
-    status: 'Under Review',
-    image: '/bhavya-pic-5.png',
-    description:
-      'A warm landscape study built around the changing colours and light of a peaceful sunset.',
-  },
-  {
-    id: 6,
-    title: 'Wildflowers',
-    artist: 'Bhavya Rao',
-    category: 'Paintings',
-    medium: 'Acrylic on Canvas',
-    price: 490,
-    submitted: '2 days ago',
-    submittedDate: 'Sep 1, 2026',
-    status: 'Under Review',
-    image: '/bhavya-pic-6.png',
-    description:
-      'A vibrant floral artwork inspired by the organic forms and colours of wildflowers.',
-  },
-]
+const initialArtworks = []
 
 const statusStyles = {
   'Under Review': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -168,14 +83,8 @@ export default function ArtworkModeration() {
   ).length
 
   function approveArtwork(id) {
-    setArtworks((current) =>
-      current.map((artwork) =>
-        artwork.id === id ? { ...artwork, status: 'Approved' } : artwork
-      )
-    )
-
-    setSelectedArtwork(null)
-    toast.success('Artwork approved successfully')
+    void id
+    toast.error('Artwork Service does not provide a moderation approval endpoint.')
   }
 
   function rejectArtwork(id) {
@@ -184,22 +93,8 @@ export default function ArtworkModeration() {
       return
     }
 
-    setArtworks((current) =>
-      current.map((artwork) =>
-        artwork.id === id
-          ? {
-              ...artwork,
-              status: 'Rejected',
-              rejectionReason: rejectionReason.trim(),
-            }
-          : artwork
-      )
-    )
-
-    setSelectedArtwork(null)
-    setRejecting(false)
-    setRejectionReason('')
-    toast.success('Artwork rejected')
+    void id
+    toast.error('Artwork Service does not provide a moderation rejection endpoint.')
   }
 
   function openReview(artwork) {
@@ -251,6 +146,10 @@ export default function ArtworkModeration() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900" role="status">
+          The current Artwork Service has no moderation queue or approve/reject endpoints. No sample records are shown, and moderation actions cannot be saved.
         </div>
 
         {/* Summary */}

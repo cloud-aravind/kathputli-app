@@ -64,46 +64,43 @@ export default function App() {
           {/* Customer shopping flow */}
           <Route path="/cart" element={<Cart />} />
 
-          {/* Temporarily public during UI verification */}
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/orders/:id" element={<OrderTrack />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+          <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="/orders/:id" element={<ProtectedRoute><OrderTrack /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
 
           {/* Artist workflow */}
-          {/* Temporarily public during UI verification */}
           <Route
             path="/artist/dashboard"
-            element={<ArtistDashboard />}
+            element={<ProtectedRoute roles={['artist-admin']}><ArtistDashboard /></ProtectedRoute>}
           />
 
           <Route
             path="/artist/artworks/upload"
-            element={<ArtworkUpload />}
+            element={<ProtectedRoute roles={['artist-admin']}><ArtworkUpload /></ProtectedRoute>}
           />
 
           <Route
             path="/artist/artworks"
-            element={<ArtworkManagement />}
+            element={<ProtectedRoute roles={['artist-admin']}><ArtworkManagement /></ProtectedRoute>}
           />
 
           <Route
             path="/artist/artworks/:id/edit"
-            element={<ArtworkEdit />}
+            element={<ProtectedRoute roles={['artist-admin']}><ArtworkEdit /></ProtectedRoute>}
           />
 
           {/* Platform administration */}
-          {/* Temporarily public during UI verification */}
           <Route
             path="/admin"
-            element={<AdminDashboard />}
+            element={<ProtectedRoute roles={['admin']}><AdminDashboard /></ProtectedRoute>}
           />
 
           {/* Artwork moderation */}
-          {/* Temporarily public during UI verification */}
+          {/* Admin-only artwork moderation; backend moderation endpoints are not available. */}
           <Route
             path="/admin/moderation"
-            element={<ArtworkModeration />}
+            element={<ProtectedRoute roles={['admin']}><ArtworkModeration /></ProtectedRoute>}
           />
 
           {/* Restaurant administration removed */}

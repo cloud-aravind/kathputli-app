@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ordersApi } from '../api/orders'
+import { artworkRecordId, keepValidArtworkRecords, uuidString } from '../api/ids'
 import { paymentsApi } from '../api/payments'
 import { normalizeOrder } from '../api/orderFormat'
 import { useAuth } from '../store/AuthContext'
@@ -16,6 +17,10 @@ import {
 } from 'lucide-react'
 
 const CART_KEY = 'kathputli-cart'
+const PENDING_ORDER_KEY = 'kathputli-checkout-pending-order'
+const MOCK_PAYMENTS_ENABLED =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_ENABLE_MOCK_PAYMENTS !== 'false'
 
 const SHIPPING_FEE = 50
 const FREE_SHIPPING_THRESHOLD = 2000
@@ -29,6 +34,46 @@ const INITIAL_ADDRESS = {
   pincode: '',
 }
 
+function cartFingerprint(items) {
+  return JSON.stringify(
+    items
+      .map((item) => ({
+        artworkId: uuidString(artworkRecordId(item)) || '',
+        quantity: Number(item.quantity || 1),
+      }))
+      .sort((a, b) => a.artworkId.localeCompare(b.artworkId))
+  )
+}
+
+function hasAuthoritativeBreakdown(order) {
+  return ['subtotal', 'shipping_amount', 'total_price'].every(
+    (field) => typeof order?.[field] === 'number' && Number.isFinite(order[field])
+  )
+}
+
+function backendErrorMessage(error, fallback) {
+  const data = error?.response?.data
+  return data?.error || data?.message || data?.details || fallback
+}
+
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds))
+
+async function getInitializedPayment(orderID) {
+  const delays = [250, 500, 1000, 1500, 2000, 2000, 2000]
+
+  for (const delay of delays) {
+    try {
+      return await paymentsApi.getByOrder(orderID)
+    } catch (error) {
+      if (error?.response?.status !== 404) throw error
+      await wait(delay)
+    }
+  }
+
+  return paymentsApi.getByOrder(orderID)
+}
+
 export default function Checkout() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
@@ -40,6 +85,8 @@ export default function Checkout() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [orderPlaced, setOrderPlaced] = useState(false)
   const [orderId, setOrderId] = useState('')
+  const [orderSummary, setOrderSummary] = useState(null)
+  const submittingRef = useRef(false)
 
   /*
    * Load the persisted artwork cart before deciding whether
@@ -50,8 +97,16 @@ export default function Checkout() {
       const storedCart = JSON.parse(
         localStorage.getItem(CART_KEY) || '[]'
       )
+      const validItems = keepValidArtworkRecords(storedCart)
 
-      setCart(Array.isArray(storedCart) ? storedCart : [])
+      if (Array.isArray(storedCart) && validItems.length !== storedCart.length) {
+        localStorage.setItem(CART_KEY, JSON.stringify(validItems))
+        toast.error(
+          'Unavailable demo artworks were removed from your cart.'
+        )
+      }
+
+      setCart(validItems)
     } catch {
       setCart([])
     } finally {
@@ -79,6 +134,9 @@ export default function Checkout() {
         : SHIPPING_FEE
 
   const total = subtotal + shipping
+  const displaySubtotal = orderSummary ? Number(orderSummary.subtotal) : subtotal
+  const displayShipping = orderSummary ? Number(orderSummary.shipping_amount) : shipping
+  const displayTotal = orderSummary ? Number(orderSummary.total_price) : total
 
   const itemCount = cart.reduce(
     (total, item) =>
@@ -122,6 +180,7 @@ export default function Checkout() {
 
   const placeOrder = async (event) => {
     event.preventDefault()
+    if (submittingRef.current) return
 
     if (!isAddressComplete) {
       toast.error(
@@ -136,29 +195,83 @@ export default function Checkout() {
       return
     }
 
-    setIsSubmitting(true)
+    const validItems = keepValidArtworkRecords(cart)
+    if (validItems.length !== cart.length) {
+      setCart(validItems)
+      localStorage.setItem(CART_KEY, JSON.stringify(validItems))
+      toast.error(
+        'Unavailable demo artworks were removed from your cart.'
+      )
+    }
+
+    if (validItems.length === 0) {
+      toast.error('Your cart is empty.')
+      navigate('/cart')
+      return
+    }
 
     if (!isAuthenticated) {
       toast.error('Please sign in before placing an order.')
       navigate('/login', { state: { from: { pathname: '/checkout' } } })
-      setIsSubmitting(false)
       return
     }
 
-    try {
-      const created = await ordersApi.create(
-        cart.map((item) => ({
-          artwork_id: String(item.artwork_id || item.id),
-          quantity: Number(item.quantity || 1),
-        }))
-      )
+    if (!MOCK_PAYMENTS_ENABLED) {
+      toast.error('Mock payments are available only in local development.')
+      return
+    }
 
-      // The backend currently supports mock payment completion only.
-      const payment = await paymentsApi.create(created.id, 'mock')
-      const completedPayment = await paymentsApi.completeMock(payment.id)
+    submittingRef.current = true
+    setIsSubmitting(true)
+
+    try {
+      const fingerprint = cartFingerprint(validItems)
+      let pending
+      try {
+        pending = JSON.parse(localStorage.getItem(PENDING_ORDER_KEY) || 'null')
+      } catch {
+        localStorage.removeItem(PENDING_ORDER_KEY)
+      }
+
+      if (
+        !pending ||
+        pending.cartFingerprint !== fingerprint ||
+        !pending.order?.id ||
+        !hasAuthoritativeBreakdown(pending.order)
+      ) {
+        const created = await ordersApi.create(
+          validItems.map((item) => ({
+            artwork_id: uuidString(artworkRecordId(item)),
+            quantity: Number(item.quantity || 1),
+          })),
+          address
+        )
+        if (!hasAuthoritativeBreakdown(created)) {
+          throw new Error('Order Service did not return an authoritative subtotal, shipping amount, and total.')
+        }
+        pending = { order: created, cartFingerprint: fingerprint, address }
+        localStorage.setItem(PENDING_ORDER_KEY, JSON.stringify(pending))
+      }
+
+      const order = pending.order
+      setOrderSummary(order)
+      const initializedPayment = await getInitializedPayment(order.id)
+      let completedPayment = initializedPayment
+
+      if (initializedPayment.status === 'pending') {
+        if (
+          initializedPayment.method !== 'mock' &&
+          initializedPayment.provider !== 'mock'
+        ) {
+          throw new Error('This order is not configured for local mock payment.')
+        }
+        completedPayment = await paymentsApi.completeMock(initializedPayment.id)
+      } else if (initializedPayment.status !== 'completed') {
+        throw new Error(`Payment cannot be completed from status: ${initializedPayment.status}.`)
+      }
+
       const normalized = normalizeOrder({
-        ...created,
-        status: created.status === 'pending_payment' ? 'confirmed' : created.status,
+        ...order,
         paymentStatus: completedPayment.status,
         paymentMethod: completedPayment.method || 'mock',
         shippingAddress: address,
@@ -171,14 +284,16 @@ export default function Checkout() {
         ...(Array.isArray(prior) ? prior.filter((item) => item.id !== normalized.id) : []),
       ]))
       localStorage.setItem(CART_KEY, '[]')
+      localStorage.removeItem(PENDING_ORDER_KEY)
       setOrderId(normalized.id)
       setOrderPlaced(true)
       toast.success('Your order and mock payment were completed.')
       setTimeout(() => navigate(`/orders/${normalized.id}`), 1200)
     } catch (error) {
       console.error('Unable to place Kathputli order:', error)
-      toast.error(error?.response?.data?.error || 'Could not place your order. Please try again.')
+      toast.error(backendErrorMessage(error, 'Could not place your order. Please try again.'))
     } finally {
+      submittingRef.current = false
       setIsSubmitting(false)
     }
   }
@@ -212,7 +327,7 @@ export default function Checkout() {
           </div>
 
           <p className="mt-7 text-xs font-semibold uppercase tracking-[0.25em] text-[#a47b55]">
-            Order confirmed
+            {orderSummary?.status === 'confirmed' ? 'Order confirmed' : 'Payment received'}
           </p>
 
           <h1 className="mt-3 font-serif text-3xl text-stone-900">
@@ -234,6 +349,23 @@ export default function Checkout() {
               {orderId}
             </p>
           </div>
+
+          {orderSummary && (
+            <div className="mt-5 w-full rounded-2xl border border-stone-200 bg-white px-6 py-4 text-left">
+              <div className="flex justify-between text-sm text-stone-500">
+                <span>Artwork subtotal</span>
+                <span>₹{Number(orderSummary.subtotal).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="mt-2 flex justify-between text-sm text-stone-500">
+                <span>Shipping</span>
+                <span>{Number(orderSummary.shipping_amount) === 0 ? 'Free' : `₹${Number(orderSummary.shipping_amount).toLocaleString('en-IN')}`}</span>
+              </div>
+              <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-medium text-stone-900">
+                <span>Total paid</span>
+                <span>₹{Number(orderSummary.total_price).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          )}
 
           <p className="mt-6 text-xs text-stone-400">
             Taking you to your order details…
@@ -410,9 +542,9 @@ export default function Checkout() {
                         </div>
 
                         <p className="shrink-0 text-sm font-medium text-stone-900">
-                          {shipping === 0
+                          {displayShipping === 0
                             ? 'Free'
-                            : `₹${shipping}`}
+                            : `₹${displayShipping}`}
                         </p>
                       </div>
 
@@ -572,7 +704,7 @@ export default function Checkout() {
 
                     <span>
                       ₹
-                      {subtotal.toLocaleString(
+                      {displaySubtotal.toLocaleString(
                         'en-IN'
                       )}
                     </span>
@@ -582,9 +714,9 @@ export default function Checkout() {
                     <span>Shipping</span>
 
                     <span>
-                      {shipping === 0
+                      {displayShipping === 0
                         ? 'Free'
-                        : `₹${shipping.toLocaleString(
+                        : `₹${displayShipping.toLocaleString(
                             'en-IN'
                           )}`}
                     </span>
@@ -600,20 +732,21 @@ export default function Checkout() {
                     </p>
 
                     <p className="mt-1 text-xs text-stone-400">
-                      Inclusive of all applicable
-                      charges
+                      {orderSummary
+                        ? 'Final total returned by Order Service'
+                        : 'Final shipping and total confirmed when you place your order'}
                     </p>
                   </div>
 
                   <p className="font-serif text-2xl font-semibold text-stone-900">
                     ₹
-                    {total.toLocaleString(
+                    {displayTotal.toLocaleString(
                       'en-IN'
                     )}
                   </p>
                 </div>
 
-                {subtotal > 0 &&
+                {!orderSummary && subtotal > 0 &&
                   subtotal <
                     FREE_SHIPPING_THRESHOLD && (
                     <div className="mt-5 rounded-2xl bg-[#faf4ee] px-4 py-3">

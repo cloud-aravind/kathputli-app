@@ -54,9 +54,17 @@ func (h *Handler) getByOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	delivery, err := h.service.GetByOrderID(r.Context(), orderID)
+	delivery, err := h.service.GetByOrderID(r.Context(), orderID, r.Header.Get("Authorization"))
 	if err != nil {
-		writeError(w, http.StatusNotFound, "delivery not found")
+		if errors.Is(err, service.ErrOrderNotFound) || errors.Is(err, service.ErrDeliveryNotFound) {
+			writeError(w, http.StatusNotFound, "delivery not found")
+			return
+		}
+		if errors.Is(err, service.ErrOrderServiceDown) {
+			writeError(w, http.StatusBadGateway, "could not verify order ownership")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "could not load delivery")
 		return
 	}
 

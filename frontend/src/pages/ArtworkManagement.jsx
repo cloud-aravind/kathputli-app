@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
   ChevronRight,
@@ -14,87 +14,8 @@ import {
   Upload,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-
-const artworks = [
-  {
-    id: 1,
-    title: 'Golden Reflections',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    price: 650,
-    status: 'Published',
-    views: 1248,
-    likes: 186,
-    image: '/bhavya-pic-1.png',
-    updated: '2 days ago',
-  },
-  {
-    id: 2,
-    title: 'Blooming Peonies',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    price: 600,
-    status: 'Published',
-    views: 982,
-    likes: 142,
-    image: '/bhavya-pic-2.png',
-    updated: '4 days ago',
-  },
-  {
-    id: 3,
-    title: 'Mountain Serenity',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    price: 580,
-    status: 'Published',
-    views: 864,
-    likes: 119,
-    image: '/bhavya-pic-3.png',
-    updated: '1 week ago',
-  },
-  {
-    id: 4,
-    title: 'City Lights',
-    category: 'Paintings',
-    collection: 'Contemporary Expressions',
-    medium: 'Acrylic on Canvas',
-    price: 540,
-    status: 'Draft',
-    views: 0,
-    likes: 0,
-    image: '/bhavya-pic-4.png',
-    updated: 'Today',
-  },
-  {
-    id: 5,
-    title: 'Sunset Hues',
-    category: 'Paintings',
-    collection: 'Everyday Moments',
-    medium: 'Oil on Canvas',
-    price: 480,
-    status: 'Under Review',
-    views: 0,
-    likes: 0,
-    image: '/bhavya-pic-5.png',
-    updated: 'Yesterday',
-  },
-  {
-    id: 6,
-    title: 'Wildflowers',
-    category: 'Paintings',
-    collection: 'Nature & Light',
-    medium: 'Oil on Canvas',
-    price: 490,
-    status: 'Sold',
-    views: 1560,
-    likes: 218,
-    image: '/bhavya-pic-6.png',
-    updated: '2 weeks ago',
-  },
-]
+import { artworksApi, mapArtwork } from '../api/artworks'
+import { artistsApi } from '../api/artists'
 
 const categories = [
   'All Categories',
@@ -109,9 +30,7 @@ const categories = [
 const statuses = [
   'All Status',
   'Published',
-  'Draft',
-  'Under Review',
-  'Sold',
+  'Inactive',
 ]
 
 function formatPrice(price) {
@@ -121,15 +40,13 @@ function formatPrice(price) {
 function StatusBadge({ status }) {
   const styles = {
     Published: 'bg-green-50 text-green-700 border-green-200',
-    Draft: 'bg-stone-100 text-stone-600 border-stone-200',
-    'Under Review': 'bg-amber-50 text-amber-700 border-amber-200',
-    Sold: 'bg-[#f7eee9] text-[#741f2b] border-[#ead7cf]',
+    Inactive: 'bg-stone-100 text-stone-600 border-stone-200',
   }
 
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium ${
-        styles[status] || styles.Draft
+        styles[status] || styles.Inactive
       }`}
     >
       {status}
@@ -168,7 +85,7 @@ function ArtworkCard({ artwork }) {
             </h3>
 
             <p className="mt-1 text-xs text-stone-500">
-              {artwork.medium}
+              {artwork.medium || 'Medium not provided'}
             </p>
           </div>
 
@@ -180,12 +97,12 @@ function ArtworkCard({ artwork }) {
         <div className="mt-4 flex items-center gap-4 border-t border-stone-100 pt-3 text-xs text-stone-400">
           <span className="flex items-center gap-1.5">
             <Eye size={14} />
-            {artwork.views.toLocaleString('en-IN')}
+            {artwork.views == null ? '—' : artwork.views.toLocaleString('en-IN')}
           </span>
 
           <span className="flex items-center gap-1.5">
             <Heart size={14} />
-            {artwork.likes.toLocaleString('en-IN')}
+            {artwork.likes == null ? '—' : artwork.likes.toLocaleString('en-IN')}
           </span>
 
           <span className="ml-auto">
@@ -235,14 +152,14 @@ function ArtworkRow({ artwork }) {
       <div className="hidden w-20 text-center lg:block">
         <p className="text-xs text-stone-400">Views</p>
         <p className="mt-1 text-sm text-stone-700">
-          {artwork.views.toLocaleString('en-IN')}
+          {artwork.views == null ? '—' : artwork.views.toLocaleString('en-IN')}
         </p>
       </div>
 
       <div className="hidden w-20 text-center xl:block">
         <p className="text-xs text-stone-400">Likes</p>
         <p className="mt-1 text-sm text-stone-700">
-          {artwork.likes.toLocaleString('en-IN')}
+          {artwork.likes == null ? '—' : artwork.likes.toLocaleString('en-IN')}
         </p>
       </div>
 
@@ -264,11 +181,45 @@ function ArtworkRow({ artwork }) {
 }
 
 export default function ArtworkManagement() {
+  const [artworks, setArtworks] = useState([])
+  const [loadError, setLoadError] = useState('')
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All Categories')
   const [status, setStatus] = useState('All Status')
   const [sortBy, setSortBy] = useState('Recently Updated')
   const [viewMode, setViewMode] = useState('grid')
+
+  useEffect(() => {
+    let active = true
+
+    artistsApi.me()
+      .then((artist) => artworksApi.listByArtist(artist.id))
+      .then((data) => {
+        if (!active) return
+        const rows = Array.isArray(data) ? data : (data.artworks || [])
+        setArtworks(rows.map((row, index) => {
+          const artwork = mapArtwork(row, index)
+          return {
+            ...artwork,
+            status: artwork.is_active ? 'Published' : 'Inactive',
+            views: null,
+            likes: null,
+            updated: artwork.updated_at
+              ? new Date(artwork.updated_at).toLocaleDateString()
+              : '—',
+          }
+        }))
+      })
+      .catch((error) => {
+        if (active) setLoadError(error?.response?.data?.error || 'Could not load your artist profile or artworks.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => { active = false }
+  }, [])
 
   const filteredArtworks = useMemo(() => {
     let result = artworks.filter((artwork) => {
@@ -276,7 +227,7 @@ export default function ArtworkManagement() {
         artwork.title
           .toLowerCase()
           .includes(search.toLowerCase()) ||
-        artwork.medium
+        (artwork.medium || '')
           .toLowerCase()
           .includes(search.toLowerCase())
 
@@ -297,14 +248,6 @@ export default function ArtworkManagement() {
 
     if (sortBy === 'Price: High to Low') {
       result = [...result].sort((a, b) => b.price - a.price)
-    }
-
-    if (sortBy === 'Most Viewed') {
-      result = [...result].sort((a, b) => b.views - a.views)
-    }
-
-    if (sortBy === 'Most Liked') {
-      result = [...result].sort((a, b) => b.likes - a.likes)
     }
 
     return result
@@ -368,26 +311,26 @@ export default function ArtworkManagement() {
         <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="Total Artworks"
-            value="129"
+            value={artworks.length}
             description="Across all collections"
           />
 
           <SummaryCard
             label="Published"
-            value="118"
+            value={artworks.filter((artwork) => artwork.status === 'Published').length}
             description="Currently visible"
           />
 
           <SummaryCard
-            label="Under Review"
-            value="4"
-            description="Awaiting approval"
+            label="Inactive"
+            value={artworks.filter((artwork) => artwork.status === 'Inactive').length}
+            description="Not visible to collectors"
           />
 
           <SummaryCard
             label="Drafts"
-            value="7"
-            description="Work in progress"
+            value="—"
+            description="Drafts are not supported by the Artwork Service"
           />
         </section>
 
@@ -467,8 +410,6 @@ export default function ArtworkManagement() {
                     <option>Recently Updated</option>
                     <option>Price: Low to High</option>
                     <option>Price: High to Low</option>
-                    <option>Most Viewed</option>
-                    <option>Most Liked</option>
                   </select>
 
                   <ChevronDown
@@ -522,8 +463,8 @@ export default function ArtworkManagement() {
           {/* Result Header */}
           <div className="flex items-center justify-between border-b border-stone-100 px-4 py-4 sm:px-5">
             <div>
-              <p className="text-sm font-medium text-stone-800">
-                {filteredArtworks.length} artworks
+                  <p className="text-sm font-medium text-stone-800">
+                {loading ? 'Loading artworks…' : `${filteredArtworks.length} artworks`}
               </p>
 
               {search || category !== 'All Categories' || status !== 'All Status' ? (
@@ -571,12 +512,11 @@ export default function ArtworkManagement() {
               </div>
 
               <h3 className="mt-4 font-serif text-xl text-stone-800">
-                No artworks found
+                {loading ? 'Loading artworks' : loadError ? 'Artwork list unavailable' : 'No artworks found'}
               </h3>
 
               <p className="mt-2 max-w-sm text-sm leading-6 text-stone-500">
-                Try changing your search or filters to find the
-                artwork you are looking for.
+                {loadError || 'Try changing your search or filters to find the artwork you are looking for.'}
               </p>
 
               <button

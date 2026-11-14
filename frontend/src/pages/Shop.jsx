@@ -7,7 +7,9 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { artistsApi } from '../api/artists'
 import { artworksApi, mapArtwork } from '../api/artworks'
+import { keepValidArtworkRecords, uuidString } from '../api/ids'
 
 
 // ============================================================
@@ -21,184 +23,32 @@ const displayFont = {
 
 
 // ============================================================
-// CATEGORY DATA
-// ============================================================
-
-const categories = [
-  'All Art',
-  'Paintings',
-  'Digital Art',
-  'Traditional Art',
-  'Famous Artworks',
-  'Sculptures',
-  'Photography',
-]
-
-
-// ============================================================
-// ARTWORK DATA
-// ============================================================
-
-const sampleArtworks = [
-  {
-    id: 1,
-    title: 'Golden Reflections',
-    artist: 'Ananya Rao',
-    price: 650,
-    category: 'Paintings',
-    image: '/category-paintings.jpg',
-  },
-
-  {
-    id: 2,
-    title: 'Blooming Hues',
-    artist: 'Maya Sen',
-    price: 420,
-    category: 'Digital Art',
-    image: '/category-digital-art.jpg',
-  },
-
-  {
-    id: 3,
-    title: 'The Living Tradition',
-    artist: 'Ravi Kumar',
-    price: 580,
-    category: 'Traditional Art',
-    image: '/category-traditional-art.jpg',
-  },
-
-  {
-    id: 4,
-    title: 'The Lady with an Ermine',
-    artist: 'Leonardo da Vinci',
-    price: 900,
-    category: 'Famous Artworks',
-    image: '/category-famous-artworks.jpg',
-  },
-
-  {
-    id: 5,
-    title: 'Marble Heritage',
-    artist: 'Classical Collection',
-    price: 1200,
-    category: 'Sculptures',
-    image: '/category-sculptures.jpg',
-  },
-
-  {
-    id: 6,
-    title: 'Faces of Art',
-    artist: 'Elena Martin',
-    price: 760,
-    category: 'Photography',
-    image: '/category-photography.jpg',
-  },
-
-
-  // ==========================================================
-  // BHAVYA RAO — PAINTINGS
-  // ==========================================================
-
-  {
-    id: 7,
-    title: 'Golden Reflections',
-    artist: 'Bhavya Rao',
-    price: 650,
-    category: 'Paintings',
-    image: '/bhavya-pic-1.png',
-  },
-
-  {
-    id: 8,
-    title: 'Blooming Peonies',
-    artist: 'Bhavya Rao',
-    price: 600,
-    category: 'Paintings',
-    image: '/bhavya-pic-2.png',
-  },
-
-  {
-    id: 9,
-    title: 'Mountain Serenity',
-    artist: 'Bhavya Rao',
-    price: 580,
-    category: 'Paintings',
-    image: '/bhavya-pic-3.png',
-  },
-
-  {
-    id: 10,
-    title: 'City Lights',
-    artist: 'Bhavya Rao',
-    price: 540,
-    category: 'Paintings',
-    image: '/bhavya-pic-4.png',
-  },
-
-  {
-    id: 11,
-    title: 'Sunset Hues',
-    artist: 'Bhavya Rao',
-    price: 480,
-    category: 'Paintings',
-    image: '/bhavya-pic-5.png',
-  },
-
-  {
-    id: 12,
-    title: 'Wildflowers',
-    artist: 'Bhavya Rao',
-    price: 490,
-    category: 'Paintings',
-    image: '/bhavya-pic-6.png',
-  },
-]
-
-
-// ============================================================
 // STORAGE KEYS
 // ============================================================
 
 const WISHLIST_KEY = 'kathputli-wishlist'
 const CART_KEY = 'kathputli-cart'
+const ITEMS_UPDATED_EVENT = 'kathputli-items-updated'
 
 
 // ============================================================
 // HELPER
 // ============================================================
 
-function formatPrice(price) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(Number(price) || 0)
-}
-
-function artworkIdentity(artwork) {
-  return [
-    String(artwork.title || '').trim().toLowerCase(),
-    String(artwork.artist || '').trim().toLowerCase(),
-    String(artwork.category || '').trim().toLowerCase(),
-  ].join('|')
+function formatPrice(price, currency = 'INR') {
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: currency || 'INR',
+      maximumFractionDigits: 0,
+    }).format(Number(price) || 0)
+  } catch {
+    return `${currency || 'INR'} ${Number(price || 0).toLocaleString('en-IN')}`
+  }
 }
 
 function shopCatalogue(liveArtworks = []) {
-  const live = liveArtworks.filter(
-    (artwork) =>
-      artwork &&
-      String(artwork.category || '').trim().toLowerCase() !== 'traditional art'
-  )
-  const liveKeys = new Set(live.map(artworkIdentity))
-
-  const demonstration = sampleArtworks
-    .map((artwork) => ({
-      ...artwork,
-      id: `shop-demo-${artwork.id}`,
-    }))
-    .filter((artwork) => !liveKeys.has(artworkIdentity(artwork)))
-
-  return [...demonstration, ...live]
+  return liveArtworks.filter(Boolean)
 }
 
 
@@ -209,20 +59,49 @@ function shopCatalogue(liveArtworks = []) {
 export default function Shop() {
   const [artworks, setArtworks] = useState(() => shopCatalogue())
   const [selectedCategory, setSelectedCategory] = useState('All Art')
+  const [selectedArtists, setSelectedArtists] = useState([])
   const [sortBy, setSortBy] = useState('Featured')
   const [openFilter, setOpenFilter] = useState(null)
 
   useEffect(() => {
     let active = true
     artworksApi.list()
-      .then((data) => {
+      .then(async (data) => {
         if (!active) return
         const rows = Array.isArray(data) ? data : (data.artworks || [])
-        setArtworks(shopCatalogue(rows.map(mapArtwork)))
+        const mapped = rows.map((row, index) => mapArtwork(row, index))
+        const artistIds = [
+          ...new Set(mapped.map((item) => item.artist_id).filter(Boolean)),
+        ]
+        const profiles = await Promise.all(
+          artistIds.map(async (artistId) => {
+            try {
+              const profile = await artistsApi.get(artistId)
+              return [artistId, profile]
+            } catch {
+              return [artistId, null]
+            }
+          })
+        )
+        const profileById = Object.fromEntries(profiles)
+        const withOwners = mapped.map((artwork) => {
+          const profile = artwork.artist_id
+            ? profileById[artwork.artist_id]
+            : null
+          const profileName =
+            typeof profile?.name === 'string' ? profile.name.trim() : ''
+
+          return {
+            ...artwork,
+            artist_id: artwork.artist_id,
+            artist: profileName,
+          }
+        })
+        if (active) setArtworks(shopCatalogue(withOwners))
       })
       .catch((error) => {
         if (!active) return
-        setArtworks(shopCatalogue())
+        setArtworks([])
         console.error('Unable to load Kathputli artworks:', error)
         toast.error('Could not load artworks. Please try again later.')
       })
@@ -231,13 +110,28 @@ export default function Shop() {
 
   const [wishlist, setWishlist] = useState(() => {
     try {
-      return JSON.parse(
+      const saved = JSON.parse(
         localStorage.getItem(WISHLIST_KEY) || '[]'
       )
+      return keepValidArtworkRecords(saved)
     } catch {
       return []
     }
   })
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]')
+      const validItems = keepValidArtworkRecords(stored)
+      if (Array.isArray(stored) && validItems.length !== stored.length) {
+        localStorage.setItem(WISHLIST_KEY, JSON.stringify(validItems))
+        window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
+        toast.error('Unavailable demo artworks were removed from your wishlist.')
+      }
+    } catch (error) {
+      console.error('Unable to normalize saved wishlist:', error)
+    }
+  }, [])
 
 
   // ==========================================================
@@ -251,6 +145,12 @@ export default function Shop() {
         : artworks.filter(
             (artwork) => artwork.category === selectedCategory
           )
+
+    if (selectedArtists.length > 0) {
+      result = result.filter((artwork) =>
+        selectedArtists.includes(artwork.artist_id)
+      )
+    }
 
 
     // ========================================================
@@ -274,7 +174,31 @@ export default function Shop() {
     }
 
     return result
-  }, [artworks, selectedCategory, sortBy])
+  }, [artworks, selectedCategory, selectedArtists, sortBy])
+
+  const artistOptions = useMemo(() => {
+    const seen = new Map()
+    artworks.forEach((item) => {
+      if (!item.artist_id || seen.has(item.artist_id)) return
+      seen.set(item.artist_id, item.artist)
+    })
+    return [...seen.entries()]
+      .filter(([, name]) => name)
+      .map(([id, name]) => ({ id, name }))
+  }, [artworks])
+
+  const categories = useMemo(() => [
+    'All Art',
+    ...new Set(artworks.map((artwork) => artwork.category).filter(Boolean)),
+  ], [artworks])
+
+  const toggleArtist = (artist) => {
+    setSelectedArtists((current) =>
+      current.includes(artist)
+        ? current.filter((value) => value !== artist)
+        : [...current, artist]
+    )
+  }
 
 
   // ==========================================================
@@ -282,21 +206,31 @@ export default function Shop() {
   // ==========================================================
 
   const toggleWishlist = (artwork) => {
-    setWishlist((current) => {
-      const exists = current.some(
-        (item) => item.id === artwork.id
-      )
+    const artworkId = uuidString(artwork?.id)
+    const exists = wishlist.some((item) => item.id === artwork?.id)
 
+    if (!exists && !artworkId) {
+      toast.error('This demo artwork cannot be saved to your wishlist.')
+      return
+    }
+
+    setWishlist((current) => {
+      const validCurrent = keepValidArtworkRecords(current)
       const updatedWishlist = exists
-        ? current.filter(
-            (item) => item.id !== artwork.id
-          )
-        : [...current, artwork]
+        ? validCurrent.filter((item) => item.id !== artwork.id)
+        : [
+            ...validCurrent,
+            {
+              ...artwork,
+              id: artworkId,
+            },
+          ]
 
       localStorage.setItem(
         WISHLIST_KEY,
         JSON.stringify(updatedWishlist)
       )
+      window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
 
       return updatedWishlist
     })
@@ -308,20 +242,26 @@ export default function Shop() {
   // ==========================================================
 
   const addToCart = (artwork) => {
+    const artworkId = uuidString(artwork?.id)
+    if (!artworkId) {
+      toast.error('This demo artwork is not available for checkout.')
+      return
+    }
+
     try {
-      const currentCart = JSON.parse(
-        localStorage.getItem(CART_KEY) || '[]'
+      const currentCart = keepValidArtworkRecords(
+        JSON.parse(localStorage.getItem(CART_KEY) || '[]')
       )
 
       const existingItem = currentCart.find(
-        (item) => item.id === artwork.id
+        (item) => item.id === artworkId
       )
 
       let updatedCart
 
       if (existingItem) {
         updatedCart = currentCart.map((item) =>
-          item.id === artwork.id
+          item.id === artworkId
             ? {
                 ...item,
                 quantity: item.quantity + 1,
@@ -333,6 +273,7 @@ export default function Shop() {
           ...currentCart,
           {
             ...artwork,
+            id: artworkId,
             quantity: 1,
           },
         ]
@@ -342,6 +283,7 @@ export default function Shop() {
         CART_KEY,
         JSON.stringify(updatedCart)
       )
+      window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
 
       toast.success(`${artwork.title} added to cart`)
     } catch (error) {
@@ -543,7 +485,7 @@ export default function Shop() {
 
                         <input
                           type="text"
-                          placeholder="$0"
+                          placeholder="₹0"
                           className="h-11 w-full rounded-xl border border-[#dfd4ca] bg-white px-3 text-sm outline-none focus:border-[#a51b1b]"
                         />
                       </div>
@@ -555,7 +497,7 @@ export default function Shop() {
 
                         <input
                           type="text"
-                          placeholder="$5,000+"
+                          placeholder="₹5,000+"
                           className="h-11 w-full rounded-xl border border-[#dfd4ca] bg-white px-3 text-sm outline-none focus:border-[#a51b1b]"
                         />
                       </div>
@@ -643,25 +585,16 @@ export default function Shop() {
 
                   <div className="space-y-3 pb-5 text-sm text-[#635b55]">
 
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" />
-                      Ananya Rao
-                    </label>
-
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" />
-                      Maya Sen
-                    </label>
-
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" />
-                      Ravi Kumar
-                    </label>
-
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" />
-                      Bhavya Rao
-                    </label>
+                    {artistOptions.map((artist) => (
+                      <label key={artist.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedArtists.includes(artist.id)}
+                          onChange={() => toggleArtist(artist.id)}
+                        />
+                        {artist.name}
+                      </label>
+                    ))}
 
                   </div>
 
@@ -783,10 +716,15 @@ export default function Shop() {
 
                         <img
                           src={artwork.image}
-                          alt={artwork.title}
-                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.025]"
+                          alt={artwork.image_missing ? `Category preview for ${artwork.title}; artwork image unavailable` : artwork.title}
+                          className={`h-full w-full object-cover transition duration-500 ${artwork.image_missing ? 'opacity-70' : 'group-hover:scale-[1.025]'}`}
                         />
 
+                        {artwork.image_missing && (
+                          <span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-3 py-1.5 text-[11px] font-medium text-white">
+                            Category preview · artwork image unavailable
+                          </span>
+                        )}
 
                         {/* Wishlist */}
 
@@ -839,15 +777,23 @@ export default function Shop() {
 
 
                           <span className="shrink-0 text-base font-semibold text-[#171311]">
-                            {formatPrice(artwork.price)}
+                            {formatPrice(artwork.price, artwork.currency)}
                           </span>
 
                         </div>
 
 
-                        <p className="mt-2 text-base text-[#746961]">
-                          by {artwork.artist}
-                        </p>
+                        {artwork.credited_name && (
+                          <p className="mt-2 text-base text-[#746961]">
+                            Credited creator: {artwork.credited_name}
+                          </p>
+                        )}
+
+                        {artwork.artist && (
+                          <p className="mt-1 text-sm text-[#746961]">
+                            Artist profile: {artwork.artist}
+                          </p>
+                        )}
 
 
                         <p className="mt-3 text-sm font-medium uppercase tracking-[0.16em] text-[#b17a22]">

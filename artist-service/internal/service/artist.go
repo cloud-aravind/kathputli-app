@@ -92,17 +92,66 @@ func (s *ArtistService) Get(ctx context.Context, id uuid.UUID) (*model.Artist, e
 	return artist, nil
 }
 
-func (s *ArtistService) Update(ctx context.Context, userID, artistID uuid.UUID, req model.UpdateArtistRequest) (*model.Artist, error) {
-	artist, err := s.repo.GetByID(ctx, artistID)
+func (s *ArtistService) GetPublic(ctx context.Context, id uuid.UUID) (*model.PublicArtist, error) {
+	artist, err := s.repo.GetPublicByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if artist == nil {
 		return nil, ErrArtistNotFound
 	}
+	return artist, nil
+}
 
+// VerifyOwnership checks that a user UUID owns the supplied artist profile UUID.
+func (s *ArtistService) VerifyOwnership(ctx context.Context, userID, artistID uuid.UUID) error {
+	if userID == uuid.Nil || artistID == uuid.Nil {
+		return ErrInvalidInput
+	}
+	_, err := s.getOwnedArtist(ctx, userID, artistID)
+	return err
+}
+
+func (s *ArtistService) getOwnedArtist(ctx context.Context, userID, artistID uuid.UUID) (*model.Artist, error) {
+	artist, err := s.repo.GetByID(ctx, artistID)
+	if err != nil {
+		return nil, fmt.Errorf("get artist for ownership check: %w", err)
+	}
+	if artist == nil {
+		return nil, ErrArtistNotFound
+	}
 	if artist.UserID != userID {
 		return nil, ErrForbidden
+	}
+	return artist, nil
+}
+
+func (s *ArtistService) ListPublic(ctx context.Context) ([]model.PublicArtist, error) {
+	artists, err := s.repo.ListPublic(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list public artists: %w", err)
+	}
+	return artists, nil
+}
+
+func (s *ArtistService) GetByUserID(ctx context.Context, userID uuid.UUID) (*model.Artist, error) {
+	if userID == uuid.Nil {
+		return nil, ErrInvalidInput
+	}
+	artist, err := s.repo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get artist by user id: %w", err)
+	}
+	if artist == nil {
+		return nil, ErrArtistNotFound
+	}
+	return artist, nil
+}
+
+func (s *ArtistService) Update(ctx context.Context, userID, artistID uuid.UUID, req model.UpdateArtistRequest) (*model.Artist, error) {
+	artist, err := s.getOwnedArtist(ctx, userID, artistID)
+	if err != nil {
+		return nil, err
 	}
 
 	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Email) == "" ||

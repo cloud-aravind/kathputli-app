@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log"
@@ -16,8 +17,18 @@ import (
 )
 
 type Handler struct {
-	service   *service.ArtistService
-	jwtSecret string
+	service          artistService
+	jwtSecret        string
+	internalAPIToken string
+}
+
+type artistService interface {
+	ListPublic(context.Context) ([]model.PublicArtist, error)
+	Create(context.Context, uuid.UUID, model.CreateArtistRequest) (*model.Artist, error)
+	GetPublic(context.Context, uuid.UUID) (*model.PublicArtist, error)
+	GetByUserID(context.Context, uuid.UUID) (*model.Artist, error)
+	Update(context.Context, uuid.UUID, uuid.UUID, model.UpdateArtistRequest) (*model.Artist, error)
+	VerifyOwnership(context.Context, uuid.UUID, uuid.UUID) error
 }
 
 type claims struct {
@@ -34,10 +45,11 @@ type authUser struct {
 	Role string
 }
 
-func New(svc *service.ArtistService, jwtSecret string) *Handler {
+func New(svc artistService, jwtSecret, internalAPIToken string) *Handler {
 	return &Handler{
-		service:   svc,
-		jwtSecret: jwtSecret,
+		service:          svc,
+		jwtSecret:        jwtSecret,
+		internalAPIToken: internalAPIToken,
 	}
 }
 
@@ -47,11 +59,24 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", h.healthz)
 	mux.HandleFunc("GET /readyz", h.readyz)
 
+	mux.HandleFunc("GET /api/artists", h.listPublic)
+	mux.HandleFunc("POST /internal/v1/artist-ownership/verify", h.verifyArtistOwnership)
 	mux.HandleFunc("POST /api/artists", h.requireRole("artist-admin", h.create))
+	mux.Handle("GET /api/artists/me", h.requireRole("artist-admin", http.HandlerFunc(h.getCurrent)))
 	mux.HandleFunc("GET /api/artists/{id}", h.get)
 	mux.HandleFunc("PUT /api/artists/{id}", h.requireRole("artist-admin", h.update))
 
 	return mux
+}
+
+func (h *Handler) listPublic(w http.ResponseWriter, r *http.Request) {
+	artists, err := h.service.ListPublic(r.Context())
+	if err != nil {
+		log.Printf("list public artists failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "could not list artists")
+		return
+	}
+	writeJSON(w, http.StatusOK, artists)
 }
 
 func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -97,9 +122,65 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	artist, err := h.service.Get(r.Context(), id)
+	artist, err := h.service.GetPublic(r.Context(), id)
 	if err != nil {
 		log.Printf("get artist failed: %v", err)
+		h.handleServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, artist)
+}
+
+type ownershipVerificationRequest struct {
+	ArtistID uuid.UUID `json:"artist_id"`
+	UserID   uuid.UUID `json:"user_id"`
+}
+
+func (h *Handler) verifyArtistOwnership(w http.ResponseWriter, r *http.Request) {
+	providedToken := r.Header.Get("ARTIST_INTERNAL_API_TOKEN")
+	if h.internalAPIToken == "" || subtle.ConstantTimeCompare([]byte(providedToken), []byte(h.internalAPIToken)) != 1 {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req ownershipVerificationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if req.ArtistID == uuid.Nil || req.UserID == uuid.Nil {
+		writeError(w, http.StatusBadRequest, "invalid ownership identifiers")
+		return
+	}
+
+	if err := h.service.VerifyOwnership(r.Context(), req.UserID, req.ArtistID); err != nil {
+		if errors.Is(err, service.ErrForbidden) || errors.Is(err, service.ErrArtistNotFound) {
+			writeError(w, http.StatusForbidden, "ownership verification failed")
+			return
+		}
+		if errors.Is(err, service.ErrInvalidInput) {
+			writeError(w, http.StatusBadRequest, "invalid ownership identifiers")
+			return
+		}
+		log.Printf("artist ownership verification failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "ownership verification failed")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) getCurrent(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	artist, err := h.service.GetByUserID(r.Context(), user.ID)
+	if err != nil {
+		log.Printf("get current artist failed: %v", err)
 		h.handleServiceError(w, err)
 		return
 	}

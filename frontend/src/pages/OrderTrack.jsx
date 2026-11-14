@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ordersApi } from '../api/orders'
+import { paymentsApi } from '../api/payments'
 import { deliveriesApi } from '../api/deliveries'
 import { normalizeOrder } from '../api/orderFormat'
 import { Link, useParams } from 'react-router-dom'
@@ -63,15 +64,56 @@ export default function OrderTrack() {
       try {
         const data = await ordersApi.get(id)
         let normalized = normalizeOrder(data)
+
+        // Query authoritative payment status from Payment Service
+        let payment = null
         try {
-          const delivery = await deliveriesApi.getByOrder(id)
-          const deliveryStatus = String(delivery.status || '').toLowerCase()
-          const deliveryMap = { assigned: 'Artwork Processing', picked_up: 'Shipped', in_transit: 'Shipped', delivered: 'Delivered' }
-          if (deliveryMap[deliveryStatus]) normalized = { ...normalized, status: deliveryMap[deliveryStatus], delivery }
-        } catch (deliveryError) {
-          // Delivery may not exist until the asynchronous order/payment events are processed.
-          if (deliveryError?.response?.status !== 404) console.warn('Delivery status is not available yet.')
+          payment = await paymentsApi.getByOrder(id)
+        } catch (paymentError) {
+          if (paymentError?.response?.status !== 404) {
+            console.warn('Payment record is not available yet.')
+          }
         }
+
+        const isPaymentCompleted = payment?.status === 'completed'
+        const authoritativePaymentStatus = isPaymentCompleted
+          ? 'Confirmed'
+          : payment?.status === 'failed'
+          ? 'Failed'
+          : 'Pending'
+
+        normalized.paymentStatus = authoritativePaymentStatus
+        if (payment?.method) {
+          normalized.paymentMethod = payment.method
+        }
+
+        // Query Delivery Service for delivery progress
+        let delivery = null
+        try {
+          delivery = await deliveriesApi.getByOrder(id)
+        } catch (deliveryError) {
+          if (deliveryError?.response?.status !== 404) {
+            console.warn('Delivery status is not available yet.')
+          }
+        }
+
+        if (delivery) {
+          normalized.delivery = delivery
+        }
+
+        // Graceful fallback to cached address for older orders created prior to backend persistence
+        if (!normalized.shippingAddress || !normalized.shippingAddress.address) {
+          try {
+            const savedOrders = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]')
+            const match = Array.isArray(savedOrders) ? savedOrders.find((o) => o.id === id) : null
+            if (match?.shippingAddress && match.shippingAddress.address) {
+              normalized.shippingAddress = match.shippingAddress
+            }
+          } catch {
+            // Ignore localStorage reading issues
+          }
+        }
+
         if (active) setOrder(normalized)
       } catch (error) {
         if (!active) return
@@ -94,9 +136,7 @@ export default function OrderTrack() {
 
   const status = order.status || 'Order Placed'
   const currentIndex = getStatusIndex(status)
-  const paymentStatus =
-    order.paymentStatus ||
-    (currentIndex >= 1 ? 'Confirmed' : 'Pending')
+  const paymentStatus = order.paymentStatus || 'Pending'
 
   const items = Array.isArray(order.items)
     ? order.items

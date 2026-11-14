@@ -1,7 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
   Image as ImageIcon,
   Info,
@@ -10,16 +9,11 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
-
-const categories = [
-  'Paintings',
-  'Digital Art',
-  'Traditional Art',
-  'Famous Artworks',
-  'Sculptures',
-  'Photography',
-]
+import { Link, useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { useAuth } from '../store/AuthContext'
+import { artworksApi } from '../api/artworks'
+import { artistsApi } from '../api/artists'
 
 const collections = [
   'Nature & Light',
@@ -39,7 +33,15 @@ const mediums = [
 ]
 
 export default function ArtworkUpload() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [artistId, setArtistId] = useState(null)
+  const [artistError, setArtistError] = useState('')
   const fileInputRef = useRef(null)
+  const submitLockRef = useRef(false)
+  const [categories, setCategories] = useState([])
+  const [categoriesError, setCategoriesError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [image, setImage] = useState(null)
   const [imageName, setImageName] = useState('')
@@ -49,6 +51,7 @@ export default function ArtworkUpload() {
     title: '',
     description: '',
     category: '',
+    imageUrl: '',
     collection: '',
     medium: '',
     width: '',
@@ -60,7 +63,26 @@ export default function ArtworkUpload() {
     availability: 'Available',
   })
 
-  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    let active = true
+    artistsApi.me()
+      .then((artist) => {
+        if (!active) return
+        setArtistId(artist.id)
+        return artworksApi.listCategories(artist.id)
+      })
+      .then((data) => {
+        if (active && data) setCategories(Array.isArray(data) ? data : (data.categories || []))
+      })
+      .catch((error) => {
+        if (active) {
+          const message = error?.response?.data?.error || 'Could not load the artist profile or artwork categories.'
+          setArtistError(message)
+          setCategoriesError(message)
+        }
+      })
+    return () => { active = false }
+  }, [artistId])
 
   const handleInputChange = (event) => {
     const { name, value } = event.target
@@ -70,7 +92,6 @@ export default function ArtworkUpload() {
       [name]: value,
     }))
 
-    setSaved(false)
   }
 
   const handleImage = (file) => {
@@ -87,7 +108,6 @@ export default function ArtworkUpload() {
     }
 
     reader.readAsDataURL(file)
-    setSaved(false)
   }
 
   const handleFileChange = (event) => {
@@ -120,14 +140,51 @@ export default function ArtworkUpload() {
 
   const handleSaveDraft = (event) => {
     event.preventDefault()
-    setSaved(true)
+    toast.error('Draft saving is not supported by the Artwork Service.')
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
+    if (submitLockRef.current) return
+    if (!artistId) {
+      toast.error(artistError || 'Artwork was not submitted because the artist profile could not be resolved.')
+      return
+    }
+    if (!formData.title.trim() || !formData.description.trim() || !formData.category || !formData.imageUrl.trim()) {
+      toast.error('Enter a title, description, existing category, and image URL.')
+      return
+    }
+    if (!String(formData.price).trim() || formData.availability !== 'Available') {
+      toast.error('The create endpoint requires a price and always creates an active artwork; other availability states are unsupported.')
+      return
+    }
+    const price = Number(formData.price)
+    const stock = Number(formData.quantity)
+    if (!Number.isFinite(price) || price < 0 || !Number.isInteger(stock) || stock < 0) {
+      toast.error('Enter a non-negative price and whole-number stock quantity.')
+      return
+    }
 
-    // UI-only for now.
-    setSaved(true)
+    submitLockRef.current = true
+    setIsSubmitting(true)
+    try {
+      await artworksApi.create(artistId, {
+        category_id: formData.category,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        price,
+        currency: 'INR',
+        image_url: formData.imageUrl.trim(),
+        stock,
+      })
+      toast.success('Artwork submitted successfully.')
+      navigate('/artist/artworks')
+    } catch (error) {
+      toast.error(error?.response?.data?.error || 'Could not submit artwork.')
+    } finally {
+      submitLockRef.current = false
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -186,29 +243,14 @@ export default function ArtworkUpload() {
 
             <div className="flex items-center gap-2 text-xs text-stone-400">
               <span className="h-2 w-2 rounded-full bg-green-600" />
-              Artist: Bhavya Rao
+              Artist: {user?.name || 'Artist account'}
             </div>
           </div>
         </section>
 
-        {/* Success Message */}
-        {saved && (
-          <div className="mb-6 flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-green-100">
-              <Check size={15} />
-            </div>
-
-            <div>
-              <p className="font-medium">
-                Artwork saved successfully
-              </p>
-              <p className="mt-0.5 text-xs text-green-700">
-                This is currently a UI preview. Backend submission will
-                be connected later.
-              </p>
-            </div>
-          </div>
-        )}
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900" role="status">
+          Artwork Service stores title, description, category ID, price, currency, image URL, and stock only; the image picker is a local preview, and collection, medium, dimensions, tags, drafts, and sold/reserved states are not supported.
+        </div>
 
         <form onSubmit={handleSubmit}>
           <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
@@ -350,6 +392,25 @@ export default function ArtworkUpload() {
                   </div>
                 </div>
               </div>
+
+              <div className="mt-5">
+                <label htmlFor="imageUrl" className="mb-2 block text-sm font-medium text-stone-700">
+                  Artwork image URL
+                </label>
+                <input
+                  id="imageUrl"
+                  name="imageUrl"
+                  type="url"
+                  value={formData.imageUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/artwork.jpg"
+                  className="form-input"
+                  required
+                />
+                <p className="mt-2 text-[10px] leading-5 text-stone-400">
+                  The Artwork Service stores image URLs; it does not upload the selected local file.
+                </p>
+              </div>
             </section>
 
             {/* ==================================================
@@ -408,6 +469,9 @@ export default function ArtworkUpload() {
                         placeholder="Select category"
                         options={categories}
                       />
+                      {categoriesError && (
+                        <p className="mt-2 text-xs text-red-700">{categoriesError}</p>
+                      )}
                     </Field>
 
                     <Field label="Collection">
@@ -579,8 +643,7 @@ export default function ArtworkUpload() {
                     </h3>
 
                     <p className="mt-1 max-w-md text-xs leading-5 text-[#75635d]">
-                      You can save your artwork as a draft and finish
-                      it later, or submit it for publishing.
+                      Drafts are not supported. Submission creates an active backend artwork using an existing category.
                     </p>
                   </div>
 
@@ -596,10 +659,11 @@ export default function ArtworkUpload() {
 
                     <button
                       type="submit"
+                      disabled={isSubmitting}
                       className="inline-flex items-center justify-center gap-2 rounded-full bg-[#741f2b] px-6 py-2.5 text-sm font-medium text-white transition hover:bg-[#5f1823]"
                     >
                       <Upload size={16} />
-                      Submit Artwork
+                      {isSubmitting ? 'Submitting…' : 'Submit Artwork'}
                     </button>
                   </div>
                 </div>
@@ -684,8 +748,8 @@ function SelectField({
         )}
 
         {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+          <option key={option.id || option} value={option.id || option}>
+            {option.name || option}
           </option>
         ))}
       </select>

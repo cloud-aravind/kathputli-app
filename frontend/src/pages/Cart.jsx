@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { keepValidArtworkRecords } from '../api/ids'
 import {
   ArrowLeft,
   CalendarDays,
@@ -19,6 +20,7 @@ import {
 // ============================================================
 
 const CART_KEY = 'kathputli-cart'
+const ITEMS_UPDATED_EVENT = 'kathputli-items-updated'
 
 
 // ============================================================
@@ -58,11 +60,16 @@ function formatPrice(price) {
 export default function Cart() {
   const navigate = useNavigate()
 
+  const droppedLegacyItems = useRef(0)
   const [cart, setCart] = useState(() => {
     try {
-      return JSON.parse(
+      const stored = JSON.parse(
         localStorage.getItem(CART_KEY) || '[]'
       )
+      const validItems = keepValidArtworkRecords(stored)
+      droppedLegacyItems.current =
+        Array.isArray(stored) ? stored.length - validItems.length : 0
+      return validItems
     } catch {
       return []
     }
@@ -78,7 +85,17 @@ export default function Cart() {
       CART_KEY,
       JSON.stringify(cart)
     )
+    window.dispatchEvent(new Event(ITEMS_UPDATED_EVENT))
   }, [cart])
+
+  useEffect(() => {
+    if (droppedLegacyItems.current > 0) {
+      droppedLegacyItems.current = 0
+      toast.error(
+        'Unavailable demo artworks were removed from your cart.'
+      )
+    }
+  }, [])
 
 
   // ==========================================================

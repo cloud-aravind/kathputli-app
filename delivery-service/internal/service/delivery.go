@@ -8,8 +8,10 @@ import (
 	"log"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/kathputli/delivery-service/internal/broker"
+	"github.com/kathputli/delivery-service/internal/client"
 	"github.com/kathputli/delivery-service/internal/model"
 	"github.com/kathputli/delivery-service/internal/repository"
 )
@@ -18,15 +20,19 @@ var (
 	ErrInvalidStatus     = errors.New("invalid delivery status")
 	ErrNotAssigned       = errors.New("delivery is not assigned to this agent")
 	ErrInvalidTransition = errors.New("invalid delivery status transition")
+	ErrOrderNotFound     = errors.New("order not found or not owned by customer")
+	ErrDeliveryNotFound  = errors.New("delivery not found")
+	ErrOrderServiceDown  = errors.New("order ownership verification unavailable")
 )
 
 type Service struct {
 	repo   *repository.Repository
 	broker *broker.Broker
+	orders *client.OrderService
 }
 
-func New(repo *repository.Repository, broker *broker.Broker) *Service {
-	return &Service{repo: repo, broker: broker}
+func New(repo *repository.Repository, broker *broker.Broker, orders *client.OrderService) *Service {
+	return &Service{repo: repo, broker: broker, orders: orders}
 }
 
 func (s *Service) HandleUserCreated(ctx context.Context, event model.UserCreatedEvent) error {
@@ -93,8 +99,18 @@ func (s *Service) GetByID(ctx context.Context, id string) (*model.Delivery, erro
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *Service) GetByOrderID(ctx context.Context, orderID string) (*model.Delivery, error) {
-	return s.repo.GetByOrderID(ctx, orderID)
+func (s *Service) GetByOrderID(ctx context.Context, orderID, authorization string) (*model.Delivery, error) {
+	if err := s.orders.VerifyOwnership(ctx, orderID, authorization); err != nil {
+		if errors.Is(err, client.ErrOrderNotFound) {
+			return nil, ErrOrderNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", ErrOrderServiceDown, err)
+	}
+	delivery, err := s.repo.GetByOrderID(ctx, orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDeliveryNotFound
+	}
+	return delivery, err
 }
 
 func (s *Service) publishUpdated(delivery *model.Delivery) {

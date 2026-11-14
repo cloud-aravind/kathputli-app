@@ -1,14 +1,4 @@
--- Remove legacy delivery agents that were not provisioned from the Auth user ID.
--- Current Kathputli agents are provisioned with id = user_id.
--- This migration is intentionally idempotent and safe to run on every startup.
-DELETE FROM deliveries
-WHERE agent_id IN (
-    SELECT id
-    FROM delivery_agents
-    WHERE user_id IS NULL
-       OR id <> user_id
-);
-
-DELETE FROM delivery_agents
-WHERE user_id IS NULL
-   OR id <> user_id;
+-- This file is executed on every startup by the current migration runner.
+-- Keep legacy agent and delivery records intact; assignment queries already
+-- exclude agents that are not linked to an Auth user.
+SELECT 1;

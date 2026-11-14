@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/kathputli/delivery-service/internal/broker"
+	"github.com/kathputli/delivery-service/internal/client"
 	"github.com/kathputli/delivery-service/internal/config"
 	"github.com/kathputli/delivery-service/internal/handler"
 	"github.com/kathputli/delivery-service/internal/migrations"
@@ -51,7 +52,8 @@ func main() {
 	}
 
 	repo := repository.New(db)
-	svc := service.New(repo, nb)
+	orderClient := client.NewOrderService(cfg.OrderServiceURL)
+	svc := service.New(repo, nb, orderClient)
 
 	if err := nb.StartConsumers(
 		ctx,

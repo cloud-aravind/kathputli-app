@@ -43,7 +43,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/artists/{artistID}/categories", h.requireRole("artist-admin", h.createCategory))
 	mux.HandleFunc("GET /api/artists/{artistID}/categories", h.listCategories)
 	mux.HandleFunc("POST /api/artists/{artistID}/artworks", h.requireRole("artist-admin", h.createArtwork))
-	mux.HandleFunc("GET /api/artists/{artistID}/artworks", h.listArtworks)
+	mux.Handle("GET /api/artists/{artistID}/artworks", h.requireRole("artist-admin", h.listArtworks))
 	mux.HandleFunc("GET /api/artworks", h.listAllArtworks)
 	mux.HandleFunc("GET /api/artworks/{id}", h.getArtwork)
 	mux.HandleFunc("PUT /api/artworks/{id}", h.requireRole("artist-admin", h.updateArtwork))
@@ -124,12 +124,17 @@ func (h *Handler) createArtwork(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listArtworks(w http.ResponseWriter, r *http.Request) {
+	u, ok := userFromContext(r.Context())
+	if !ok {
+		writeError(w, 401, "unauthorized")
+		return
+	}
 	artistID, err := parseUUID(r.PathValue("artistID"), "artist id")
 	if err != nil {
 		writeError(w, 400, err.Error())
 		return
 	}
-	a, err := h.service.ListArtworks(r.Context(), artistID)
+	a, err := h.service.ListArtworks(r.Context(), u.ID, artistID)
 	if err != nil {
 		log.Printf("list artworks failed: %v", err)
 		h.handleError(w, err)
